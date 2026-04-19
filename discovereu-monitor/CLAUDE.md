@@ -40,3 +40,31 @@ az login
 source .venv/bin/activate
 func azure functionapp publish discovereu-monitor
 ```
+
+# Project Guidelines
+
+## Git Workflow & Branching
+You are authorized and expected to use Git commands via the terminal to manage version control. Strictly adhere to the following workflow:
+
+1. **Never commit directly to `main` or `master`** if you are building a new feature or fixing a bug.
+2. **Branching:** Before making code changes, always check the current branch. If a new feature or fix is requested, create and switch to a new branch using the format:
+   - `feat/<feature-name>` for new additions.
+   - `fix/<bug-name>` for bug fixes.
+   - Example: `git checkout -b feat/user-authentication`
+
+## Commit Standards (Conventional Commits)
+When committing changes (`git commit`), you MUST use professional commit prefixes. The format is `<type>(<scope>): <subject>`.
+
+**Allowed Types:**
+* **feat:** A new feature (e.g., `feat: add login button`)
+* **fix:** A bug fix (e.g., `fix: resolve crash on null user`)
+* **docs:** Documentation only changes (e.g., `docs: update readme`)
+* **style:** Changes that do not affect the meaning of the code (white-space, formatting)
+* **refactor:** A code change that neither fixes a bug nor adds a feature
+* **test:** Adding missing tests or correcting existing tests
+* **chore:** Changes to the build process or auxiliary tools
+
+**Commit Rules:**
+* Write the commit message in the present tense imperative ("add feature" not "added feature").
+* Keep the subject line concise.
+* Always review `git status` and `git diff` before committing to ensure you are only staging the relevant files.
