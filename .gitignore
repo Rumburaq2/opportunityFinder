@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Azure Functions
+local.settings.json
+.python_packages/
+
+# Secrets / env
+.env
+*.env
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
