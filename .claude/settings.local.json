@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s 'https://youth.europa.eu/discovereu/meetups_en')",
+      "Bash(curl -s 'https://youth.europa.eu/modules/custom/')",
+      "Bash(curl -s 'https://youth.europa.eu/discovereu/deu-meetups.json?year=2026&page=0')",
+      "Bash(curl -s 'https://youth.europa.eu/discovereu-meetups.json')"
+    ]
+  }
+}
