@@ -3,6 +3,7 @@ import time
 
 import azure.functions as func
 
+from events_writer import upsert_events
 from notifier import format_notification, send_notification
 from scraper import compute_hash, get_all_meetups
 from state import load_state, save_state, update_last_checked
@@ -39,6 +40,13 @@ def check_meetups(timer: func.TimerRequest) -> None:
         )
         update_last_checked()
         return
+
+    # --- Shadow-write to Supabase (Phase 1a, additive) ---
+    # Failure here must not affect the legacy owner-notification flow below.
+    try:
+        upsert_events(meetups_1, "discovereu")
+    except Exception:
+        logging.exception("Shadow write to Supabase failed (legacy flow continues)")
 
     # --- Both fetches agree — compare against stored state ---
     stored_state = load_state()
