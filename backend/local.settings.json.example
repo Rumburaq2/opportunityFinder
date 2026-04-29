@@ -5,7 +5,6 @@
     "FUNCTIONS_WORKER_RUNTIME": "python",
     "TELEGRAM_BOT_TOKEN": "<your-telegram-bot-token>",
     "TELEGRAM_CHAT_ID": "<your-telegram-chat-id>",
-    "AZURE_STORAGE_CONNECTION_STRING": "<your-azure-storage-connection-string>",
     "SUPABASE_URL": "https://<your-project-ref>.supabase.co",
     "SUPABASE_SERVICE_ROLE_KEY": "<your-supabase-service-role-or-secret-key>"
   }
