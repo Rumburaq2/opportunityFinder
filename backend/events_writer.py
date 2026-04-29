@@ -29,6 +29,11 @@ def _row_for_discovereu(item: dict) -> dict:
 
 
 def upsert_events(items: Iterable[dict], source: str) -> list[str]:
+    """Upsert events into Supabase, returning ids of rows that were newly inserted.
+
+    Existing rows still get `last_seen_at` refreshed; only their ids are
+    excluded from the return value so callers can act on genuine novelty.
+    """
     if source != "discovereu":
         # youth_exchange (RSS) shape lands in Phase 4
         raise ValueError(f"Unsupported source: {source!r}")
@@ -39,8 +44,16 @@ def upsert_events(items: Iterable[dict], source: str) -> list[str]:
         return []
 
     client = get_client()
-    response = client.table("events").upsert(rows, on_conflict="id").execute()
+    ids = [r["id"] for r in rows]
 
-    ids = [r["id"] for r in (response.data or [])]
-    logging.info("upsert_events: wrote %d rows to Supabase (source=%s)", len(ids), source)
-    return ids
+    existing = client.table("events").select("id").in_("id", ids).execute()
+    existing_ids = {r["id"] for r in (existing.data or [])}
+    new_ids = [r_id for r_id in ids if r_id not in existing_ids]
+
+    client.table("events").upsert(rows, on_conflict="id").execute()
+
+    logging.info(
+        "upsert_events: wrote %d rows to Supabase (source=%s, %d new)",
+        len(rows), source, len(new_ids),
+    )
+    return new_ids

@@ -5,14 +5,14 @@ Azure Function App that checks https://youth.europa.eu/discovereu/meetups_en hou
 ## Architecture
 - `function_app.py` — timer trigger (every hour), orchestrates the check
 - `scraper.py` — calls the DiscoverEU REST API, normalizes and hashes meetup data
-- `state.py` — reads/writes `meetup-state.json` to Azure Blob Storage
+- `supabase_client.py` / `events_writer.py` — upsert meetups into Supabase `events`; `upsert_events` returns ids of newly inserted rows
 - `notifier.py` — sends Telegram messages via Bot API
 
 ## How change detection works
 1. Fetches meetups from the API
 2. Waits 30s and fetches again — only proceeds if both results match (prevents false positives)
-3. Compares hash against stored state in blob storage
-4. Notifies and saves new state only if a real change is confirmed
+3. Upserts into Supabase `events`; novelty is whatever Supabase didn't already have
+4. Notifies on the newly inserted rows
 
 ## API
 The meetup data comes from an internal Elasticsearch REST API (not the rendered page):
@@ -22,7 +22,9 @@ Requires `Referer` and `User-Agent` headers to avoid firewall blocking. No auth 
 ## Environment variables
 - `TELEGRAM_BOT_TOKEN` — Telegram bot token from @BotFather
 - `TELEGRAM_CHAT_ID` — Telegram chat ID
-- `AZURE_STORAGE_CONNECTION_STRING` — Azure Storage connection string (also set as `AzureWebJobsStorage` in local.settings.json)
+- `SUPABASE_URL` — Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` — Supabase service-role key (server-only)
+- `AzureWebJobsStorage` — required by the Functions runtime itself (timer state, etc.); not used by app code
 
 ## Local development
 ```bash
