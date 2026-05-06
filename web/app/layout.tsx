@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+
+import { createClient } from "@/lib/supabase/server";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,11 +22,16 @@ export const metadata: Metadata = {
     "Browse free DiscoverEU meet-ups and NGO-hosted Youth Exchanges across Europe.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <html
       lang="en"
@@ -39,6 +47,20 @@ export default function RootLayout({
               <Link href="/events" className="hover:underline">
                 Browse events
               </Link>
+              {user ? (
+                <Link href="/account" className="hover:underline">
+                  Account
+                </Link>
+              ) : (
+                <>
+                  <Link href="/login" className="hover:underline">
+                    Log in
+                  </Link>
+                  <Link href="/signup" className="hover:underline">
+                    Sign up
+                  </Link>
+                </>
+              )}
             </nav>
           </div>
         </header>
