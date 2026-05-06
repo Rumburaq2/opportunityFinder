@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
@@ -44,7 +45,16 @@ export default async function AccountPage() {
 
         <dt className="text-sm text-zinc-500">Telegram linked</dt>
         <dd className="text-sm">
-          {profile?.telegram_chat_id ? "Yes" : "Not yet"}
+          {profile?.telegram_chat_id ? (
+            "Yes"
+          ) : (
+            <Link
+              href="/account/link-telegram"
+              className="underline hover:no-underline"
+            >
+              Link now
+            </Link>
+          )}
         </dd>
       </dl>
 
