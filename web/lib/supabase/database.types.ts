@@ -30,6 +30,37 @@ export type Database = {
         };
         Relationships: [];
       };
+      subscriptions_filters: {
+        Row: {
+          id: string;
+          user_id: string;
+          event_type: "any" | "discovereu" | "youth_exchange";
+          country: string | null;
+          date_from: string | null;
+          date_to: string | null;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          event_type?: "any" | "discovereu" | "youth_exchange";
+          country?: string | null;
+          date_from?: string | null;
+          date_to?: string | null;
+          active?: boolean;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          event_type?: "any" | "discovereu" | "youth_exchange";
+          country?: string | null;
+          date_from?: string | null;
+          date_to?: string | null;
+          active?: boolean;
+        };
+        Relationships: [];
+      };
       telegram_link_tokens: {
         Row: {
           token: string;
