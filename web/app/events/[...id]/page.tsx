@@ -17,13 +17,17 @@ function formatDateRange(start: string | null, end: string | null) {
 export default async function EventDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string[] }>;
 }) {
+  // Catch-all route: some event ids contain "/" (EYC uses the full post URL as
+  // the id) and SWA normalizes %2F to "/" before routing, splitting one logical
+  // id across multiple segments. Re-join here to reconstruct.
   const { id } = await params;
+  const eventId = id.join("/");
   const { data, error } = await supabase()
     .from("events")
     .select("*")
-    .eq("id", decodeURIComponent(id))
+    .eq("id", eventId)
     .maybeSingle();
   if (error) {
     console.error("event detail load failed:", error);
