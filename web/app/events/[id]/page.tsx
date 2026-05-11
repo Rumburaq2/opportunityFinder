@@ -52,6 +52,19 @@ export default async function EventDetailPage({
         {formatDateRange(event.period_start, event.period_end)}
         {event.country ? ` · ${event.country}` : ""}
       </div>
+      {event.partner_countries && event.partner_countries.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+          <span className="text-zinc-500">Partner countries:</span>
+          {event.partner_countries.map((c) => (
+            <span
+              key={c}
+              className="rounded-full border border-zinc-200 px-2 py-0.5 dark:border-zinc-700"
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
       {event.description && (
         <p className="mt-6 whitespace-pre-line text-zinc-800 dark:text-zinc-200">
           {event.description}

@@ -12,6 +12,7 @@ export type EventRow = {
   period_start: string | null;
   period_end: string | null;
   country: string | null;
+  partner_countries: string[] | null;
   url: string | null;
   first_seen_at: string;
   last_seen_at: string;
