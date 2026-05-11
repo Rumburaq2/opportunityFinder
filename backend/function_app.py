@@ -3,6 +3,7 @@ import time
 
 import azure.functions as func
 
+from adapters import ADAPTERS
 from dispatcher import dispatch_pending
 from events_writer import upsert_events
 from notifier import format_notification, send_notification
@@ -62,9 +63,22 @@ def check_meetups(timer: func.TimerRequest) -> None:
             "Scrape/legacy notification step failed (continuing to dispatcher)"
         )
 
-    # --- Step 2: dispatcher (Phase 3d, additive) ---
-    # Runs every cycle regardless of step 1's outcome so previously-failed sends
-    # retry and late filter creations get picked up.
+    # --- Step 2: NGO adapters (Phase 4a) ---
+    # Each adapter is isolated: a single broken source must not block the
+    # others or the dispatcher. Adapters dedup against `events` internally so
+    # re-running this loop is cheap.
+    for adapter in ADAPTERS:
+        try:
+            items = adapter.fetch()
+            upsert_events(items, adapter.SOURCE)
+        except Exception:
+            logging.exception(
+                "adapter %s failed (continuing)", getattr(adapter, "__name__", "?")
+            )
+
+    # --- Step 3: dispatcher (Phase 3d, additive) ---
+    # Runs every cycle regardless of earlier outcomes so previously-failed
+    # sends retry and late filter creations get picked up.
     try:
         dispatch_pending()
     except Exception:
