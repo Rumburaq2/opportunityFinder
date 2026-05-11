@@ -19,11 +19,16 @@ export default async function EventDetailPage({
 }: {
   params: Promise<{ id: string[] }>;
 }) {
-  // Catch-all route: some event ids contain "/" (EYC uses the full post URL as
+  // Catch-all route: event ids may contain "/" (EYC uses the full post URL as
   // the id) and SWA normalizes %2F to "/" before routing, splitting one logical
   // id across multiple segments. Re-join here to reconstruct.
+  //
+  // SWA Hybrid Next.js delivers catch-all segments still percent-encoded
+  // (observed: a single-segment `discovereu%3A27615` arrives as the literal
+  // string with %3A intact, not decoded to ":"). Decode each segment manually
+  // before joining.
   const { id } = await params;
-  const eventId = id.join("/");
+  const eventId = id.map(decodeURIComponent).join("/");
   const { data, error } = await supabase()
     .from("events")
     .select("*")
