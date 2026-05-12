@@ -23,11 +23,12 @@ from datetime import date, datetime
 
 import feedparser
 
-from events_writer import existing_ids
+from events_writer import mark_skipped, seen_ids
 from llm_extractor import extract
 from pdf_fetcher import fetch_pdf
 
 SOURCE = "youth_exchange"
+ADAPTER_NAME = "eyc_breclav"
 
 _FEED_URL = "https://eycb.eu/category/zahranicni-projekty/feed/"
 _ID_PREFIX = "eyc:"
@@ -131,10 +132,10 @@ def fetch() -> list[dict]:
     if not by_id:
         return []
 
-    seen = existing_ids(by_id.keys())
+    seen = seen_ids(by_id.keys())
     fresh = {eid: entry for eid, entry in by_id.items() if eid not in seen}
     logging.info(
-        "eyc_breclav: %d entries, %d already in events, %d to extract",
+        "eyc_breclav: %d entries, %d already seen, %d to extract",
         len(by_id), len(seen), len(fresh),
     )
 
@@ -166,17 +167,19 @@ def fetch() -> list[dict]:
                 "eyc_breclav: skipping %s (not a Youth Exchange: %r)",
                 event_id, extracted["name"],
             )
+            mark_skipped(event_id, ADAPTER_NAME, "not_youth_exchange")
             continue
 
         try:
             end = datetime.strptime(extracted["period_end"], "%Y-%m-%d").date()
         except ValueError:
-            continue
+            continue  # transient parse failure — retry next cycle
         if end < today:
             logging.info(
                 "eyc_breclav: skipping %s (already ended on %s)",
                 event_id, extracted["period_end"],
             )
+            mark_skipped(event_id, ADAPTER_NAME, "already_ended")
             continue
 
         items.append({
