@@ -128,7 +128,7 @@ export default async function EventsPage({
           {events.map((e) => (
             <li key={e.id}>
               <Link
-                href={`/events/${encodeURIComponent(e.id)}`}
+                href={`/events/${Buffer.from(e.id).toString("base64url")}`}
                 className="block p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900"
               >
                 <div className="flex items-start justify-between gap-4">
