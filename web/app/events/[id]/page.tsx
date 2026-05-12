@@ -17,18 +17,14 @@ function formatDateRange(start: string | null, end: string | null) {
 export default async function EventDetailPage({
   params,
 }: {
-  params: Promise<{ id: string[] }>;
+  params: Promise<{ id: string }>;
 }) {
-  // Catch-all route: event ids may contain "/" (EYC uses the full post URL as
-  // the id) and SWA normalizes %2F to "/" before routing, splitting one logical
-  // id across multiple segments. Re-join here to reconstruct.
-  //
-  // SWA Hybrid Next.js delivers catch-all segments still percent-encoded
-  // (observed: a single-segment `discovereu%3A27615` arrives as the literal
-  // string with %3A intact, not decoded to ":"). Decode each segment manually
-  // before joining.
+  // URL slug is the event id encoded as base64url so any character (slashes,
+  // colons, question marks) survives SWA's URL normalization untouched. EYC
+  // ids embed the full post URL; without this encoding SWA collapses the
+  // protocol's "//" and drops query separators, breaking the round-trip.
   const { id } = await params;
-  const eventId = id.map(decodeURIComponent).join("/");
+  const eventId = Buffer.from(id, "base64url").toString("utf-8");
   const { data, error } = await supabase()
     .from("events")
     .select("*")
