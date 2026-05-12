@@ -51,18 +51,42 @@ _ROW_BUILDERS = {
 }
 
 
-def existing_ids(candidate_ids: Iterable[str]) -> set[str]:
-    """Return the subset of ids that already exist in `events`.
+def seen_ids(candidate_ids: Iterable[str]) -> set[str]:
+    """Return the subset of ids the system has previously processed.
 
+    "Previously processed" = either stored in `events` (kept) OR recorded in
+    `skipped_sources` (deliberately discarded — non-YE, already-ended, etc.).
     Adapters call this *before* invoking the LLM extractor so unchanged posts
-    don't burn through the Gemini quota. `events` doubles as the dedup ledger.
+    don't burn through the Gemini quota.
     """
     ids = list(candidate_ids)
     if not ids:
         return set()
     client = get_client()
-    response = client.table("events").select("id").in_("id", ids).execute()
-    return {r["id"] for r in (response.data or [])}
+    events_resp = client.table("events").select("id").in_("id", ids).execute()
+    skipped_resp = (
+        client.table("skipped_sources").select("source_id").in_("source_id", ids).execute()
+    )
+    return (
+        {r["id"] for r in (events_resp.data or [])}
+        | {r["source_id"] for r in (skipped_resp.data or [])}
+    )
+
+
+def mark_skipped(source_id: str, adapter: str, reason: str) -> None:
+    """Record a non-retryable decision to discard a source row.
+
+    Only call for decisions that won't change on a retry (e.g., the post is
+    classified as non-YE, or its dates have passed). Do NOT call for transient
+    failures like validator rejection or PDF fetch error — those should be
+    retried next cycle.
+    """
+    client = get_client()
+    client.table("skipped_sources").upsert(
+        {"source_id": source_id, "adapter": adapter, "reason": reason},
+        on_conflict="source_id",
+        ignore_duplicates=True,
+    ).execute()
 
 
 def upsert_events(items: Iterable[dict], source: str) -> list[str]:

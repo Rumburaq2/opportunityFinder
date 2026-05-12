@@ -18,14 +18,17 @@ State lives in the `events` table itself — no extra ledger.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime
 
 import feedparser
 
-from events_writer import existing_ids
+from events_writer import mark_skipped, seen_ids
 from llm_extractor import extract
+from pdf_fetcher import fetch_pdf
 
 SOURCE = "youth_exchange"
+ADAPTER_NAME = "eyc_breclav"
 
 _FEED_URL = "https://eycb.eu/category/zahranicni-projekty/feed/"
 _ID_PREFIX = "eyc:"
@@ -33,7 +36,11 @@ _ID_PREFIX = "eyc:"
 
 EXTRACTION_PROMPT = """\
 You extract a single Youth Exchange event from a Czech-language NGO blog post
-(EYC Břeclav, https://eycb.eu). Return JSON matching the provided schema.
+(EYC Břeclav, https://eycb.eu). An English-language info-pack PDF is often
+attached to this request — it is the authoritative source. When the PDF is
+present, prefer its data for `partner_countries`, `country` (host), and the
+event dates; the Czech post body is usually shorter and sometimes omits the
+partner list entirely. Return JSON matching the provided schema.
 
 Definitions:
 - A Youth Exchange (Czech: "Mládežnická výměna") is specifically an Erasmus+
@@ -90,6 +97,18 @@ def _stable_id(entry: dict) -> str | None:
     return raw.strip() if isinstance(raw, str) and raw.strip() else None
 
 
+_INFO_PACK_RE = re.compile(
+    r"https?://drive\.google\.com/file/d/[A-Za-z0-9_-]+(?:/[^\s\"<>]*)?",
+)
+
+
+def _info_pack_url(body: str) -> str | None:
+    # EYC posts consistently link the info pack as the only Google Drive URL
+    # in the body. Take the first match.
+    m = _INFO_PACK_RE.search(body)
+    return m.group(0) if m else None
+
+
 def fetch() -> list[dict]:
     parsed = feedparser.parse(_FEED_URL)
     if parsed.bozo:
@@ -113,10 +132,10 @@ def fetch() -> list[dict]:
     if not by_id:
         return []
 
-    seen = existing_ids(by_id.keys())
+    seen = seen_ids(by_id.keys())
     fresh = {eid: entry for eid, entry in by_id.items() if eid not in seen}
     logging.info(
-        "eyc_breclav: %d entries, %d already in events, %d to extract",
+        "eyc_breclav: %d entries, %d already seen, %d to extract",
         len(by_id), len(seen), len(fresh),
     )
 
@@ -128,7 +147,18 @@ def fetch() -> list[dict]:
             logging.info("eyc_breclav: skipping %s (empty body)", event_id)
             continue
 
-        extracted = extract(EXTRACTION_PROMPT, body)
+        pdf_bytes: bytes | None = None
+        info_pack = _info_pack_url(body)
+        if info_pack:
+            pdf_bytes = fetch_pdf(info_pack)
+            if pdf_bytes is None:
+                logging.info(
+                    "eyc_breclav: info-pack fetch failed for %s, falling back "
+                    "to text-only extraction (url=%s)",
+                    event_id, info_pack,
+                )
+
+        extracted = extract(EXTRACTION_PROMPT, body, pdf_bytes=pdf_bytes)
         if extracted is None:
             continue  # validator already logged the reason
 
@@ -137,17 +167,19 @@ def fetch() -> list[dict]:
                 "eyc_breclav: skipping %s (not a Youth Exchange: %r)",
                 event_id, extracted["name"],
             )
+            mark_skipped(event_id, ADAPTER_NAME, "not_youth_exchange")
             continue
 
         try:
             end = datetime.strptime(extracted["period_end"], "%Y-%m-%d").date()
         except ValueError:
-            continue
+            continue  # transient parse failure — retry next cycle
         if end < today:
             logging.info(
                 "eyc_breclav: skipping %s (already ended on %s)",
                 event_id, extracted["period_end"],
             )
+            mark_skipped(event_id, ADAPTER_NAME, "already_ended")
             continue
 
         items.append({
