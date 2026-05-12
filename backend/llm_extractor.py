@@ -18,6 +18,7 @@ import os
 from datetime import date, datetime, timedelta
 
 from google import genai
+from google.genai import types
 
 _MODEL_NAME = "gemini-2.5-flash-lite"
 
@@ -130,16 +131,28 @@ def _validate(data: dict) -> dict | None:
     }
 
 
-def extract(prompt: str, content: str) -> dict | None:
+def extract(
+    prompt: str, content: str, pdf_bytes: bytes | None = None,
+) -> dict | None:
     """Run the LLM against `content` using the caller-supplied `prompt`.
+
+    If `pdf_bytes` is provided (an info-pack PDF for the same event), it's
+    attached to the request as an inline PDF Part so Gemini can read its full
+    content including tables and flag-icon layouts — typically the only place
+    partner_countries and exact reimbursement / age limits appear.
 
     Returns a validated dict or None on any failure (network, model, parse,
     schema, validation). Callers must treat None as "skip this item for now".
     """
+    parts: list = [prompt, content]
+    if pdf_bytes is not None:
+        parts.append(
+            types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+        )
     try:
         response = _get_client().models.generate_content(
             model=_MODEL_NAME,
-            contents=[prompt, content],
+            contents=parts,
             config={
                 "response_mime_type": "application/json",
                 "response_schema": _RESPONSE_SCHEMA,

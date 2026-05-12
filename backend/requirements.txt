@@ -1,5 +1,6 @@
 azure-functions
 requests
+httpx
 supabase
 google-genai
 feedparser
