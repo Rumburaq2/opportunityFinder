@@ -71,9 +71,28 @@ Fields:
   given, use the 1st and last day of that month. If the year is missing,
   infer from context.
 - `partner_countries`: ISO-3166 alpha-2 codes of OTHER participating
-  countries (excluding the host). The post usually lists these under
-  "Země:" or "Účastníci:" or "Partnerské země:". Return null if none are
-  listed. Do not invent.
+  countries (excluding the host).
+
+  PRIMARY SOURCE — the info-pack PDF if one is attached. Erasmus+
+  Youth Exchange info packs ALWAYS list participating countries. Read
+  the whole PDF and look in any of these places:
+    * a "Participating organisations" / "Partner organisations" /
+      "Project partners" section listing one organisation per country;
+    * a "Countries involved" / "Participating countries" list;
+    * a "Group leaders" table with one row per national group;
+    * a flag/country row in the project-overview section;
+    * the budget/reimbursement table (it normally has one row per
+      sending country).
+  Extract every country that appears in any of these and exclude the
+  host country itself. Do not invent countries that are not mentioned,
+  but do not return null just because the partner list isn't in the
+  first paragraph — it is almost always somewhere in the PDF.
+
+  SECONDARY SOURCE — the Czech post body, under "Země:", "Účastníci:",
+  "Partnerské země:", or similar. Use this only if no PDF is attached
+  or the PDF genuinely doesn't list partners.
+
+  Return null ONLY when neither source mentions any partner countries.
 - `description`: 80–160 word English summary of the project (topic, target
   group, dates, location, anything practical like cost or working language).
   Use the post's own facts; do not embellish.
