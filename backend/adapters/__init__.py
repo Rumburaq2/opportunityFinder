@@ -6,6 +6,6 @@ and `EXTRACTION_PROMPT`; append it to ADAPTERS below.
 """
 from __future__ import annotations
 
-from . import eyc_breclav
+from . import bfy, eyc_breclav
 
-ADAPTERS = [eyc_breclav]
+ADAPTERS = [eyc_breclav, bfy]
