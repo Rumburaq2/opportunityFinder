@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getRequestOrigin } from "@/lib/origin";
 import { createClient } from "@/lib/supabase/server";
 
 // Handles the redirect from Supabase after email confirmation or magic-link
 // sign-in. Exchanges the `?code=...` for a session, then redirects to /account.
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const origin = getRequestOrigin(request);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/account";
 
