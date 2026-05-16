@@ -1,17 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getRequestOrigin } from "@/lib/origin";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 
 type ProfileRow = { stripe_customer_id: string | null };
 
 export async function POST(request: NextRequest) {
+  const origin = getRequestOrigin(request);
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url), 303);
+    return NextResponse.redirect(new URL("/login", origin), 303);
   }
 
   const priceId = process.env.STRIPE_PRICE_ID;
@@ -26,7 +28,6 @@ export async function POST(request: NextRequest) {
     .eq("id", user.id)
     .single<ProfileRow>();
 
-  const origin = new URL(request.url).origin;
   const stripe = getStripe();
 
   const session = await stripe.checkout.sessions.create({
