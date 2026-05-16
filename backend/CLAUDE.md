@@ -21,7 +21,6 @@ Requires `Referer` and `User-Agent` headers to avoid firewall blocking. No auth 
 
 ## Environment variables
 - `TELEGRAM_BOT_TOKEN` — Telegram bot token from @BotFather
-- `TELEGRAM_CHAT_ID` — Telegram chat ID
 - `SUPABASE_URL` — Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service-role key (server-only)
 - `AzureWebJobsStorage` — required by the Functions runtime itself (timer state, etc.); not used by app code

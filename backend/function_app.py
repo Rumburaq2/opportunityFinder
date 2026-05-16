@@ -6,7 +6,6 @@ import azure.functions as func
 from adapters import ADAPTERS
 from dispatcher import dispatch_pending
 from events_writer import upsert_events
-from notifier import format_notification, send_notification
 from scraper import compute_hash, get_all_meetups
 
 app = func.FunctionApp()
@@ -21,9 +20,11 @@ app = func.FunctionApp()
 def check_meetups(timer: func.TimerRequest) -> None:
     logging.info("DiscoverEU meetup check started")
 
-    # --- Step 1: scrape + legacy owner notification ---
-    # Wrapped so a scraper hiccup doesn't block the dispatcher (which can still
-    # retry previously-failed sends from earlier cycles).
+    # --- Step 1: DiscoverEU scrape + upsert ---
+    # Wrapped so a scraper hiccup doesn't block adapters or the dispatcher
+    # (which can still retry previously-failed sends from earlier cycles).
+    # The 30s double-fetch guards against transient API noise creating
+    # spurious event rows that the dispatcher would then notify on.
     try:
         meetups_1 = get_all_meetups()
         hash_1 = compute_hash(meetups_1)
@@ -43,24 +44,17 @@ def check_meetups(timer: func.TimerRequest) -> None:
         if hash_1 != hash_2:
             logging.warning(
                 "Transient difference detected between two fetches — skipping "
-                "legacy notification. hash1=%s hash2=%s",
+                "upsert. hash1=%s hash2=%s",
                 hash_1[:12], hash_2[:12],
             )
         else:
             new_ids = upsert_events(meetups_1, "discovereu")
-            if not new_ids:
-                logging.info("No new meetups detected")
-            else:
-                new_ids_set = set(new_ids)
-                added = [
-                    m for m in meetups_1 if f"discovereu:{m['id']}" in new_ids_set
-                ]
-                logging.info("Change detected! %d new meetups", len(added))
-                send_notification(format_notification(added))
-                logging.info("Legacy owner notification sent")
+            logging.info(
+                "DiscoverEU upsert: %d total, %d new", len(meetups_1), len(new_ids)
+            )
     except Exception:
         logging.exception(
-            "Scrape/legacy notification step failed (continuing to dispatcher)"
+            "DiscoverEU scrape step failed (continuing to adapters)"
         )
 
     # --- Step 2: NGO adapters (Phase 4a) ---
