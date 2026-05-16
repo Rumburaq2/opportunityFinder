@@ -75,11 +75,27 @@ export default async function AccountPage() {
         <dd className="text-sm">{user.email}</dd>
 
         <dt className="text-sm text-zinc-500">Subscription</dt>
-        <dd className="text-sm">
-          {profile?.subscription_status ?? "—"}
-          {profile?.subscription_current_period_end
-            ? ` (until ${profile.subscription_current_period_end.slice(0, 10)})`
-            : ""}
+        <dd className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          {isPaid ? (
+            <span className="inline-flex items-center rounded-md bg-zinc-900 px-2 py-0.5 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
+              Pro
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-md border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">
+              Free
+            </span>
+          )}
+          {profile?.subscription_current_period_end && (
+            <span className="text-zinc-500">
+              until {profile.subscription_current_period_end.slice(0, 10)}
+            </span>
+          )}
+          <Link
+            href="/account/billing"
+            className="underline hover:no-underline"
+          >
+            {isPaid ? "Manage billing" : "Upgrade"}
+          </Link>
         </dd>
 
         <dt className="text-sm text-zinc-500">Telegram linked</dt>
@@ -114,12 +130,13 @@ export default async function AccountPage() {
               + New filter
             </Link>
           ) : (
-            <span
-              className="text-sm text-zinc-500"
-              title="Free accounts may have one active filter. Deactivate the existing one or upgrade."
+            <Link
+              href="/account/billing"
+              className="text-sm text-zinc-500 underline hover:no-underline"
+              title="Free accounts may have one active filter. Upgrade to remove the cap."
             >
-              Free-tier limit of filters reached
-            </span>
+              Free-tier limit reached — upgrade
+            </Link>
           )}
         </div>
 

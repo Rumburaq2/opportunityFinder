@@ -21,6 +21,9 @@ local.settings.json
 .env
 *.env
 
+# MCP server config — contains a Supabase personal access token
+.mcp.json
+
 # Editor
 .vscode/
 .idea/
