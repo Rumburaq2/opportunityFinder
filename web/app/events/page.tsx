@@ -5,6 +5,7 @@ import { supabase, type EventRow, type EventSource } from "@/lib/supabase";
 const SOURCE_LABEL: Record<EventSource, string> = {
   discovereu: "DiscoverEU",
   youth_exchange: "Youth Exchange",
+  training_course: "Training Course",
 };
 
 function formatDateRange(start: string | null, end: string | null) {
@@ -53,7 +54,9 @@ export default async function EventsPage({
 }) {
   const params = await searchParams;
   const source: EventSource | null =
-    params.source === "discovereu" || params.source === "youth_exchange"
+    params.source === "discovereu" ||
+    params.source === "youth_exchange" ||
+    params.source === "training_course"
       ? params.source
       : null;
   const country = params.country?.trim() || null;
@@ -84,6 +87,7 @@ export default async function EventsPage({
             <option value="">All</option>
             <option value="discovereu">DiscoverEU</option>
             <option value="youth_exchange">Youth Exchange</option>
+            <option value="training_course">Training Course</option>
           </select>
         </label>
 

@@ -22,6 +22,13 @@ from google.genai import types
 
 _MODEL_NAME = "gemini-2.5-flash-lite"
 
+# Activity formats the NGO adapters classify between. `other` covers ESC,
+# Strategic Seminar, Job Shadowing, conferences, etc. — the adapter drops it.
+FORMAT_YOUTH_EXCHANGE = "youth_exchange"
+FORMAT_TRAINING_COURSE = "training_course"
+FORMAT_OTHER = "other"
+_ALLOWED_FORMATS = {FORMAT_YOUTH_EXCHANGE, FORMAT_TRAINING_COURSE, FORMAT_OTHER}
+
 # Strict JSON shape the model must return. `nullable` lets partner_countries
 # be omitted when the post doesn't list any (DiscoverEU-style single-country
 # posts), so we don't force the model to invent data.
@@ -38,7 +45,10 @@ _RESPONSE_SCHEMA = {
             "nullable": True,
         },
         "description":        {"type": "string"},
-        "is_youth_exchange":  {"type": "boolean"},
+        "format":             {
+            "type": "string",
+            "enum": list(_ALLOWED_FORMATS),
+        },
     },
     "required": [
         "name",
@@ -46,7 +56,7 @@ _RESPONSE_SCHEMA = {
         "period_start",
         "period_end",
         "description",
-        "is_youth_exchange",
+        "format",
     ],
 }
 
@@ -117,7 +127,8 @@ def _validate(data: dict) -> dict | None:
         if not partner:
             partner = None
 
-    if not isinstance(data.get("is_youth_exchange"), bool):
+    fmt = data.get("format")
+    if fmt not in _ALLOWED_FORMATS:
         return None
 
     return {
@@ -127,7 +138,7 @@ def _validate(data: dict) -> dict | None:
         "period_end": end.isoformat(),
         "partner_countries": partner,
         "description": description,
-        "is_youth_exchange": data["is_youth_exchange"],
+        "format": fmt,
     }
 
 

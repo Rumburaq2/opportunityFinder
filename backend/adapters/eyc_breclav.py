@@ -6,14 +6,15 @@ Flow per hourly cycle:
   2. Compute candidate ids `eyc:<entry.id>`; ask events_writer which already
      exist and drop those (so we don't burn Gemini quota on re-runs).
   3. For each new entry, call llm_extractor with the bespoke Czech prompt and
-     the entry's full HTML body.
-  4. Drop items where `is_youth_exchange=false` (Training Courses, ESC, etc.)
-     or `period_end < today` (no point notifying about events that already
-     ended).
-  5. Return the remaining items in the shape upsert_events expects for
-     source='youth_exchange'.
+     the entry's full HTML body. The LLM classifies the post as a Youth
+     Exchange, a Training Course, or other (ESC / strategic seminar / etc.).
+  4. Drop items where `format == 'other'` or `period_end < today`. Items keep
+     `format` so the caller can write them to the right source bucket.
 
-State lives in the `events` table itself — no extra ledger.
+Returns a list of (source, item) pairs so the caller can route each item to
+either the `youth_exchange` or `training_course` events.source bucket.
+
+State lives in the `events` and `skipped_sources` tables — no extra ledger.
 """
 from __future__ import annotations
 
@@ -24,34 +25,44 @@ from datetime import date, datetime
 import feedparser
 
 from events_writer import mark_skipped, seen_ids
-from llm_extractor import extract
+from llm_extractor import (
+    FORMAT_TRAINING_COURSE,
+    FORMAT_YOUTH_EXCHANGE,
+    extract,
+)
 from pdf_fetcher import fetch_pdf
 
-SOURCE = "youth_exchange"
 ADAPTER_NAME = "eyc_breclav"
+
+_FORMAT_TO_SOURCE = {
+    FORMAT_YOUTH_EXCHANGE: "youth_exchange",
+    FORMAT_TRAINING_COURSE: "training_course",
+}
 
 _FEED_URL = "https://eycb.eu/category/zahranicni-projekty/feed/"
 _ID_PREFIX = "eyc:"
 
 
 EXTRACTION_PROMPT = """\
-You extract a single Youth Exchange event from a Czech-language NGO blog post
-(EYC Břeclav, https://eycb.eu). An English-language info-pack PDF is often
-attached to this request — it is the authoritative source. When the PDF is
-present, prefer its data for `partner_countries`, `country` (host), and the
+You extract a single Erasmus+ mobility event from a Czech-language NGO blog
+post (EYC Břeclav, https://eycb.eu). An English-language info-pack PDF is
+often attached to this request — it is the authoritative source. When the PDF
+is present, prefer its data for `partner_countries`, `country` (host), and the
 event dates; the Czech post body is usually shorter and sometimes omits the
 partner list entirely. Return JSON matching the provided schema.
 
-Definitions:
-- A Youth Exchange (Czech: "Mládežnická výměna") is specifically an Erasmus+
-  Key Action 1 youth-mobility activity for participants aged ~13–30. The post
-  usually flags this with phrases like "Klíčová akce 1", "KA1", "Mládežnická
-  výměna", or "Youth Exchange".
-- Set `is_youth_exchange` to FALSE for every other format, including:
-  Training Course / "Tréninkový kurz" / "Školení mládežnických pracovníků",
-  European Solidarity Corps / ESC / "Evropský sbor solidarity" / "dlouhodobá
-  dobrovolnická služba", Strategic Seminar / "Strategický seminář",
-  Mobility of Youth Workers, Job Shadowing, Study Visit, conference.
+Classify the post into one of three formats via the `format` field:
+- "youth_exchange" — Erasmus+ Key Action 1 youth-mobility activity for
+  participants aged ~13–30. The post usually flags this with phrases like
+  "Klíčová akce 1", "KA1", "Mládežnická výměna", or "Youth Exchange".
+- "training_course" — Erasmus+ Key Action 1 training for youth workers /
+  leaders / trainers. Phrases include "Tréninkový kurz", "Training Course",
+  "TC", "Školení mládežnických pracovníků", "Mobility of Youth Workers". The
+  target group is youth workers, NOT teen participants.
+- "other" — every other format: European Solidarity Corps / ESC / "Evropský
+  sbor solidarity" / "dlouhodobá dobrovolnická služba", Strategic Seminar /
+  "Strategický seminář", Job Shadowing, Study Visit, conference. The
+  extraction will be discarded.
 
 Fields:
 - `name`: short English title of the project. If the post only gives a Czech
@@ -128,7 +139,12 @@ def _info_pack_url(body: str) -> str | None:
     return m.group(0) if m else None
 
 
-def fetch() -> list[dict]:
+def fetch() -> list[tuple[str, dict]]:
+    """Return a list of (source, item) pairs ready for upsert_events.
+
+    `source` is either "youth_exchange" or "training_course"; the caller is
+    responsible for batching by source when writing to Supabase.
+    """
     parsed = feedparser.parse(_FEED_URL)
     if parsed.bozo:
         logging.warning(
@@ -159,7 +175,7 @@ def fetch() -> list[dict]:
     )
 
     today = date.today()
-    items: list[dict] = []
+    items: list[tuple[str, dict]] = []
     for event_id, entry in fresh.items():
         body = _entry_body(entry)
         if not body.strip():
@@ -181,12 +197,14 @@ def fetch() -> list[dict]:
         if extracted is None:
             continue  # validator already logged the reason
 
-        if not extracted["is_youth_exchange"]:
+        fmt = extracted["format"]
+        source = _FORMAT_TO_SOURCE.get(fmt)
+        if source is None:
             logging.info(
-                "eyc_breclav: skipping %s (not a Youth Exchange: %r)",
-                event_id, extracted["name"],
+                "eyc_breclav: skipping %s (format=%s, name=%r)",
+                event_id, fmt, extracted["name"],
             )
-            mark_skipped(event_id, ADAPTER_NAME, "not_youth_exchange")
+            mark_skipped(event_id, ADAPTER_NAME, f"format_{fmt}")
             continue
 
         try:
@@ -201,7 +219,7 @@ def fetch() -> list[dict]:
             mark_skipped(event_id, ADAPTER_NAME, "already_ended")
             continue
 
-        items.append({
+        items.append((source, {
             "id": event_id,
             "name": extracted["name"],
             "description": extracted["description"],
@@ -216,7 +234,7 @@ def fetch() -> list[dict]:
                 "rss_published": entry.get("published"),
                 "llm": extracted,
             },
-        })
+        }))
 
-    logging.info("eyc_breclav: returning %d Youth Exchange items", len(items))
+    logging.info("eyc_breclav: returning %d items", len(items))
     return items

@@ -28,26 +28,33 @@ def _row_for_discovereu(item: dict) -> dict:
     }
 
 
-def _row_for_youth_exchange(item: dict) -> dict:
-    # Adapter is responsible for the id prefix (e.g. "eyc:<rss_guid>").
-    return {
-        "id": item["id"],
-        "source": "youth_exchange",
-        "name": item.get("name") or "",
-        "description": item.get("description") or "",
-        "period_start": _to_date(item.get("period_start")),
-        "period_end": _to_date(item.get("period_end")),
-        "country": item.get("country") or None,
-        "partner_countries": item.get("partner_countries") or None,
-        "url": item.get("url") or None,
-        "raw": item.get("raw"),
-        "last_seen_at": datetime.now(timezone.utc).isoformat(),
-    }
+def _row_for_ngo(source: str):
+    """Builder factory for NGO-adapter sources (youth_exchange, training_course).
+
+    Both formats produce the same row shape; only the `source` column differs.
+    Adapter is responsible for the id prefix (e.g. "eyc:<rss_guid>").
+    """
+    def build(item: dict) -> dict:
+        return {
+            "id": item["id"],
+            "source": source,
+            "name": item.get("name") or "",
+            "description": item.get("description") or "",
+            "period_start": _to_date(item.get("period_start")),
+            "period_end": _to_date(item.get("period_end")),
+            "country": item.get("country") or None,
+            "partner_countries": item.get("partner_countries") or None,
+            "url": item.get("url") or None,
+            "raw": item.get("raw"),
+            "last_seen_at": datetime.now(timezone.utc).isoformat(),
+        }
+    return build
 
 
 _ROW_BUILDERS = {
     "discovereu": _row_for_discovereu,
-    "youth_exchange": _row_for_youth_exchange,
+    "youth_exchange": _row_for_ngo("youth_exchange"),
+    "training_course": _row_for_ngo("training_course"),
 }
 
 
