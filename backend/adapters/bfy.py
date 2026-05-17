@@ -1,20 +1,24 @@
 """Brno for you (brnoforyou.cz) adapter: ingests Czech-language NGO project
-posts from the "Aktuální nabídky projektů" listing filtered to youth-exchange
-projects.
+posts from the "Aktuální nabídky projektů" listing.
 
 Unlike EYC, the site doesn't expose a project-specific RSS feed (the site-wide
 /feed/ is past-participant blog posts, not open calls). Flow per hourly cycle:
 
-  1. GET the listing page with the server-side ?cat=ye filter; parse anchors
-     to `/projekty/<slug>/` to discover candidate projects.
+  1. GET the listing pages for both Youth Exchange (?cat=ye) and Training
+     Course (?cat=tc); parse anchors to `/projekty/<slug>/` to discover
+     candidate projects from both categories.
   2. Compute candidate ids `bfy:<slug>`; ask events_writer which already exist
      and drop those (no LLM call for unchanged posts).
   3. For each new id, GET its detail page, extract the article body, and look
      for a project-specific info-pack PDF on the brnoforyou.cz domain. Generic
      admin/T&C PDFs and Canva links are skipped — see _info_pack_url.
   4. Pass the body (and PDF when present) to llm_extractor with the bespoke
-     Czech prompt. Drop items where `is_youth_exchange=false` or
-     `period_end < today`.
+     Czech prompt. The LLM independently classifies the post as YE / TC /
+     other; we trust the classification rather than the listing category.
+     Drop items where `format == 'other'` or `period_end < today`.
+
+Returns (source, item) pairs so the caller can route each item to the right
+events.source bucket.
 
 State lives in the `events` and `skipped_sources` tables — no extra ledger.
 """
@@ -29,13 +33,24 @@ import httpx
 from bs4 import BeautifulSoup
 
 from events_writer import mark_skipped, seen_ids
-from llm_extractor import extract
+from llm_extractor import (
+    FORMAT_TRAINING_COURSE,
+    FORMAT_YOUTH_EXCHANGE,
+    extract,
+)
 from pdf_fetcher import fetch_pdf
 
-SOURCE = "youth_exchange"
 ADAPTER_NAME = "bfy"
 
-_LISTING_URL = "https://www.brnoforyou.cz/aktualni-nabidky-projektu/?cat=ye"
+_FORMAT_TO_SOURCE = {
+    FORMAT_YOUTH_EXCHANGE: "youth_exchange",
+    FORMAT_TRAINING_COURSE: "training_course",
+}
+
+_LISTING_URLS = (
+    "https://www.brnoforyou.cz/aktualni-nabidky-projektu/?cat=ye",
+    "https://www.brnoforyou.cz/aktualni-nabidky-projektu/?cat=tc",
+)
 _BASE = "https://www.brnoforyou.cz"
 _ID_PREFIX = "bfy:"
 
@@ -58,21 +73,27 @@ _GENERIC_PDF_HINTS = (
 
 
 EXTRACTION_PROMPT = """\
-You extract a single Youth Exchange event from a Czech-language NGO project
+You extract a single Erasmus+ mobility event from a Czech-language NGO project
 page (Brno for you, https://www.brnoforyou.cz). The page uses a structured
 field-style layout, not free prose. An info-pack PDF may be attached to this
 request — when present, prefer the PDF for `partner_countries`, `country`
 (host), and exact dates. When no PDF is attached, extract from the page text
 alone; do NOT make up data.
 
-Definitions:
-- A Youth Exchange (Czech: "Mládežnická výměna" / "Výměna mládeže") is
-  specifically an Erasmus+ Key Action 1 youth-mobility activity for
-  participants aged ~13–30. The page is filtered to this category, so almost
-  every post should qualify; set `is_youth_exchange` to FALSE only for
-  obviously different formats (Training Course / "Tréninkový kurz",
-  European Solidarity Corps / ESC / "Evropský sbor solidarity", Strategic
-  Seminar, Mobility of Youth Workers, Job Shadowing, conference).
+Classify the post into one of three formats via the `format` field:
+- "youth_exchange" — Erasmus+ Key Action 1 youth-mobility activity for
+  participants aged ~13–30 ("Mládežnická výměna" / "Výměna mládeže" / "YE").
+- "training_course" — Erasmus+ Key Action 1 training for youth workers /
+  leaders / trainers ("Tréninkový kurz", "Training Course", "TC", "Školení
+  mládežnických pracovníků", "Mobility of Youth Workers"). Target group is
+  youth workers, NOT teen participants.
+- "other" — every other format: European Solidarity Corps / ESC / "Evropský
+  sbor solidarity", Strategic Seminar, Job Shadowing, Study Visit,
+  conference. The extraction will be discarded.
+
+Use the page's own labels and content to classify — do not rely on the URL
+or category. The category tag at the top of the page (YE, TC) is a strong
+hint but not authoritative.
 
 The page typically uses these Czech field labels — look for them first:
 - "Termín" — date range of the activity.
@@ -199,17 +220,28 @@ def _info_pack_url(detail_html: str, slug: str) -> str | None:
     return None
 
 
-def fetch() -> list[dict]:
-    listing = _http_get(_LISTING_URL)
-    if not listing:
+def fetch() -> list[tuple[str, dict]]:
+    """Return a list of (source, item) pairs ready for upsert_events.
+
+    `source` is either "youth_exchange" or "training_course"; the caller is
+    responsible for batching by source when writing to Supabase.
+    """
+    all_slugs: list[str] = []
+    seen_slugs: set[str] = set()
+    for listing_url in _LISTING_URLS:
+        listing = _http_get(listing_url)
+        if not listing:
+            continue
+        for slug in _discover_slugs(listing):
+            if slug not in seen_slugs:
+                seen_slugs.add(slug)
+                all_slugs.append(slug)
+
+    if not all_slugs:
+        logging.info("bfy: listings returned 0 project slugs")
         return []
 
-    slugs = _discover_slugs(listing)
-    if not slugs:
-        logging.info("bfy: listing returned 0 project slugs")
-        return []
-
-    candidates = {f"{_ID_PREFIX}{slug}": slug for slug in slugs}
+    candidates = {f"{_ID_PREFIX}{slug}": slug for slug in all_slugs}
     seen = seen_ids(candidates.keys())
     fresh = {eid: slug for eid, slug in candidates.items() if eid not in seen}
     logging.info(
@@ -218,7 +250,7 @@ def fetch() -> list[dict]:
     )
 
     today = date.today()
-    items: list[dict] = []
+    items: list[tuple[str, dict]] = []
     for event_id, slug in fresh.items():
         detail_url = f"{_BASE}/projekty/{slug}/"
         detail_html = _http_get(detail_url)
@@ -250,12 +282,14 @@ def fetch() -> list[dict]:
         if extracted is None:
             continue
 
-        if not extracted["is_youth_exchange"]:
+        fmt = extracted["format"]
+        source = _FORMAT_TO_SOURCE.get(fmt)
+        if source is None:
             logging.info(
-                "bfy: skipping %s (not a Youth Exchange: %r)",
-                event_id, extracted["name"],
+                "bfy: skipping %s (format=%s, name=%r)",
+                event_id, fmt, extracted["name"],
             )
-            mark_skipped(event_id, ADAPTER_NAME, "not_youth_exchange")
+            mark_skipped(event_id, ADAPTER_NAME, f"format_{fmt}")
             continue
 
         try:
@@ -270,7 +304,7 @@ def fetch() -> list[dict]:
             mark_skipped(event_id, ADAPTER_NAME, "already_ended")
             continue
 
-        items.append({
+        items.append((source, {
             "id": event_id,
             "name": extracted["name"],
             "description": extracted["description"],
@@ -284,7 +318,7 @@ def fetch() -> list[dict]:
                 "info_pack_url": info_pack,
                 "llm": extracted,
             },
-        })
+        }))
 
-    logging.info("bfy: returning %d Youth Exchange items", len(items))
+    logging.info("bfy: returning %d items", len(items))
     return items

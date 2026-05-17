@@ -60,11 +60,16 @@ def check_meetups(timer: func.TimerRequest) -> None:
     # --- Step 2: NGO adapters (Phase 4a) ---
     # Each adapter is isolated: a single broken source must not block the
     # others or the dispatcher. Adapters dedup against `events` internally so
-    # re-running this loop is cheap.
+    # re-running this loop is cheap. Each adapter returns (source, item)
+    # pairs; we group by source so a single upsert call covers each bucket.
     for adapter in ADAPTERS:
         try:
-            items = adapter.fetch()
-            upsert_events(items, adapter.SOURCE)
+            pairs = adapter.fetch()
+            by_source: dict[str, list[dict]] = {}
+            for source, item in pairs:
+                by_source.setdefault(source, []).append(item)
+            for source, items in by_source.items():
+                upsert_events(items, source)
         except Exception:
             logging.exception(
                 "adapter %s failed (continuing)", getattr(adapter, "__name__", "?")

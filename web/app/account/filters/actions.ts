@@ -5,7 +5,12 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 
-const EVENT_TYPES = ["any", "discovereu", "youth_exchange"] as const;
+const EVENT_TYPES = [
+  "any",
+  "discovereu",
+  "youth_exchange",
+  "training_course",
+] as const;
 type EventType = (typeof EVENT_TYPES)[number];
 
 type FilterInput = {

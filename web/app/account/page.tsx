@@ -14,7 +14,7 @@ type Profile = {
 
 type Filter = {
   id: string;
-  event_type: "any" | "discovereu" | "youth_exchange";
+  event_type: "any" | "discovereu" | "youth_exchange" | "training_course";
   country: string | null;
   date_from: string | null;
   date_to: string | null;
@@ -25,6 +25,7 @@ const EVENT_TYPE_LABEL: Record<Filter["event_type"], string> = {
   any: "Any",
   discovereu: "DiscoverEU",
   youth_exchange: "Youth exchange",
+  training_course: "Training course",
 };
 
 function describeFilter(f: Filter): string {

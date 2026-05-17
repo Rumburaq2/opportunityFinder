@@ -8,7 +8,7 @@ import { FilterForm } from "../FilterForm";
 
 type Filter = {
   id: string;
-  event_type: "any" | "discovereu" | "youth_exchange";
+  event_type: "any" | "discovereu" | "youth_exchange" | "training_course";
   country: string | null;
   date_from: string | null;
   date_to: string | null;

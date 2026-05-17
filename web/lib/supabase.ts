@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient } from "@supabase/supabase-js";
 
-export type EventSource = "discovereu" | "youth_exchange";
+export type EventSource = "discovereu" | "youth_exchange" | "training_course";
 
 export type EventRow = {
   id: string;

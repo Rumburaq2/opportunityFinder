@@ -6,6 +6,7 @@ import { supabase, type EventRow, type EventSource } from "@/lib/supabase";
 const SOURCE_LABEL: Record<EventSource, string> = {
   discovereu: "DiscoverEU",
   youth_exchange: "Youth Exchange",
+  training_course: "Training Course",
 };
 
 function formatDateRange(start: string | null, end: string | null) {

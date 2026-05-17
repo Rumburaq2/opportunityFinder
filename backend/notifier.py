@@ -24,6 +24,8 @@ def format_event_match(row: dict) -> str:
         if source == "discovereu"
         else "Youth exchange match!"
         if source == "youth_exchange"
+        else "Training course match!"
+        if source == "training_course"
         else "New event match!"
     )
     name = row.get("event_name") or "(no title)"

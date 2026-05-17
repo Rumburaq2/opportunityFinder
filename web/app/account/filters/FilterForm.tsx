@@ -1,7 +1,7 @@
 type FilterFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   initial?: {
-    event_type: "any" | "discovereu" | "youth_exchange";
+    event_type: "any" | "discovereu" | "youth_exchange" | "training_course";
     country: string | null;
     date_from: string | null;
     date_to: string | null;
@@ -36,6 +36,7 @@ export function FilterForm({
           <option value="any">Any</option>
           <option value="discovereu">DiscoverEU only</option>
           <option value="youth_exchange">Youth exchange only</option>
+          <option value="training_course">Training course only</option>
         </select>
       </div>
 
