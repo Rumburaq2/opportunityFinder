@@ -128,7 +128,11 @@ Fields:
       them inline, e.g. "brings together participants from Poland, Croatia,
       Italy, Portugal, Romania, and Cyprus" — treat that sentence as the
       participating list and drop the host.
-  Return null only when neither source names any other country.
+  Use only real ISO-3166-1 alpha-2 country codes. NEVER output placeholder or
+  bloc codes such as "XX", "EU", "EUR", or "INT". If a source only says
+  participants come from "the EU" / "programme countries" without naming
+  specific countries, return null rather than inventing codes.
+  Return null only when neither source names any specific other country.
 - `description`: 80-160 word English summary covering the topic, target group
   (youth workers / trainers / etc.), dates, host location, and anything
   practical (working language, methods, what participants will do). Use the

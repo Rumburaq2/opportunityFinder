@@ -86,15 +86,52 @@ def _parse_date(value: str) -> date | None:
         return None
 
 
-def _is_iso2(value: str) -> bool:
-    return isinstance(value, str) and len(value) == 2 and value.isalpha() and value.isupper()
+# Real ISO-3166-1 alpha-2 country codes. We accept every actual country (so a
+# training course in an "exotic" but real location is never dropped) but reject
+# placeholder / bloc codes the LLM sometimes emits — e.g. "XX" (unknown) or
+# "EU" — which pass a naive two-uppercase-letters shape check but aren't
+# countries. "EU" is an ISO "exceptionally reserved" code, not a country, so it
+# is deliberately absent; "XK" (Kosovo, user-assigned) IS included because
+# SALTO and the Western-Balkans feeds list it.
+_ISO_3166_1_ALPHA2 = frozenset((
+    "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ "
+    "BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ "
+    "CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ "
+    "DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR "
+    "GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY "
+    "HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP "
+    "KE KG KH KI KM KN KP KR KW KY KZ "
+    "LA LB LC LI LK LR LS LT LU LV LY "
+    "MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ "
+    "NA NC NE NF NG NI NL NO NP NR NU NZ OM "
+    "PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW "
+    "SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ "
+    "TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ "
+    "UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW "
+    "XK"
+).split())
+
+# Common LLM aliases for valid countries -> their canonical ISO code, applied
+# before the set check so legitimate extractions aren't dropped over spelling.
+_COUNTRY_ALIASES = {"UK": "GB", "EL": "GR"}
+
+
+def _normalize_country(value: object) -> str | None:
+    """Return a canonical ISO-3166-1 alpha-2 code, or None if `value` is not a
+    recognised country (rejects placeholders like "XX" and bloc codes like
+    "EU")."""
+    if not isinstance(value, str):
+        return None
+    code = value.strip().upper()
+    code = _COUNTRY_ALIASES.get(code, code)
+    return code if code in _ISO_3166_1_ALPHA2 else None
 
 
 def _validate(data: dict) -> dict | None:
     name = (data.get("name") or "").strip()
     description = (data.get("description") or "").strip()
-    country = (data.get("country") or "").strip().upper()
-    if not name or not description or not _is_iso2(country):
+    country = _normalize_country(data.get("country"))
+    if not name or not description or country is None:
         return None
 
     start = _parse_date(data.get("period_start", ""))
@@ -117,11 +154,12 @@ def _validate(data: dict) -> dict | None:
             return None
         partner = []
         for entry in partner_raw:
-            if not isinstance(entry, str):
-                return None
-            code = entry.strip().upper()
-            if not _is_iso2(code):
-                return None
+            # Drop anything that isn't a real country (placeholders like "XX",
+            # bloc codes like "EU") rather than rejecting the whole extraction —
+            # one junk partner code shouldn't lose an otherwise-valid course.
+            code = _normalize_country(entry)
+            if code is None:
+                continue
             if code != country and code not in partner:
                 partner.append(code)
         if not partner:
