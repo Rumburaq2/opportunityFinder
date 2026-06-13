@@ -73,6 +73,15 @@ _PARTICIPATING_COUNTRIES = ("CZ",)
 # capture the whole current backlog in a single compliant request.
 _LISTING_LIMIT = "100"
 
+# Cap the number of fresh items extracted per cycle. The cold-start backlog is
+# ~70 offers, each needing a detail GET + a (sometimes 16 MB) info-pack PDF
+# uploaded to Gemini; doing all of them in one invocation overruns the worker's
+# memory/runtime budget and — because we upsert all-or-nothing at the end of
+# fetch() — loses the whole batch on a kill. Bounding per cycle keeps each run
+# small; dedup (`seen_ids`) drains the backlog over the next several hourly runs
+# and steady-state (a few new offers/day) clears in one.
+_MAX_PER_CYCLE = 10
+
 # Detail URLs look like /tools/european-training-calendar/training/<slug>.<id>/
 # where <id> is a stable numeric id we use for dedup.
 _DETAIL_RE = re.compile(
@@ -242,9 +251,17 @@ def fetch() -> list[tuple[str, dict]]:
     candidates = {f"{_ID_PREFIX}{nid}": url for nid, url in discovered}
     seen = seen_ids(candidates.keys())
     fresh = {eid: url for eid, url in candidates.items() if eid not in seen}
+
+    # Bound per-cycle work (see _MAX_PER_CYCLE). The remainder is picked up on
+    # subsequent hourly runs — dedup makes re-listing cheap.
+    backlog = len(fresh)
+    if backlog > _MAX_PER_CYCLE:
+        fresh = dict(list(fresh.items())[:_MAX_PER_CYCLE])
     logging.info(
-        "salto: %d listed, %d already seen, %d to extract",
-        len(candidates), len(seen), len(fresh),
+        "salto: %d listed, %d already seen, %d fresh, extracting %d this cycle "
+        "(%d deferred)",
+        len(candidates), len(seen), backlog, len(fresh),
+        max(0, backlog - len(fresh)),
     )
 
     today = date.today()
