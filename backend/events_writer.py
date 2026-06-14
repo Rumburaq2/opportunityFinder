@@ -28,11 +28,53 @@ def _row_for_discovereu(item: dict) -> dict:
     }
 
 
+def eligible_countries_for(
+    host: str | None,
+    partner_countries: list[str] | None,
+    sending_country: str | None,
+) -> list[str] | None:
+    """Build an event's `eligible_countries` set from its extracted geography.
+
+    Phase 4f-B. The set lists the countries whose nationals can join the event;
+    the dispatcher matches it against the user's `home_country` only when a
+    filter opts in (see migration 0012). Two adapter regimes:
+
+      * National adapter (`sending_country` set, e.g. 'CZ' for the Czech NGOs):
+        host + partners + sending country, de-duplicated, host first. The
+        sending country guarantees the set is never empty, so a missed partner
+        list can't hide a Czech-eligible event from Czech users.
+      * General adapter (`sending_country=None`, e.g. SALTO): host + partners,
+        but ONLY when partners were actually extracted. With no partners we
+        cannot tell who may join, so we return None — the caller DROPS the event
+        rather than guess an open-to-all set (4f-B: accept loss over flooding).
+
+    NULL `eligible_countries` is reserved for declared-open sources (DiscoverEU,
+    via `_row_for_discovereu`) and is never produced here.
+    """
+    ordered: list[str] = []
+
+    def _add(code: str | None) -> None:
+        if code and code not in ordered:
+            ordered.append(code)
+
+    _add(host)
+    for code in (partner_countries or []):
+        _add(code)
+
+    if sending_country is None:
+        # General adapter: only meaningful when we actually learned partners.
+        return ordered if partner_countries else None
+
+    _add(sending_country)
+    return ordered
+
+
 def _row_for_ngo(source: str):
     """Builder factory for NGO-adapter sources (youth_exchange, training_course).
 
     Both formats produce the same row shape; only the `source` column differs.
-    Adapter is responsible for the id prefix (e.g. "eyc:<rss_guid>").
+    Adapter is responsible for the id prefix (e.g. "eyc:<rss_guid>") and for
+    computing `eligible_countries` (see eligible_countries_for).
     """
     def build(item: dict) -> dict:
         return {
@@ -44,6 +86,7 @@ def _row_for_ngo(source: str):
             "period_end": _to_date(item.get("period_end")),
             "country": item.get("country") or None,
             "partner_countries": item.get("partner_countries") or None,
+            "eligible_countries": item.get("eligible_countries") or None,
             "url": item.get("url") or None,
             "raw": item.get("raw"),
             "last_seen_at": datetime.now(timezone.utc).isoformat(),

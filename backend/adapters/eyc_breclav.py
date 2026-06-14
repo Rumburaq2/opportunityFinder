@@ -24,7 +24,7 @@ from datetime import date, datetime
 
 import feedparser
 
-from events_writer import mark_skipped, seen_ids
+from events_writer import eligible_countries_for, mark_skipped, seen_ids
 from llm_extractor import (
     FORMAT_TRAINING_COURSE,
     FORMAT_YOUTH_EXCHANGE,
@@ -33,6 +33,12 @@ from llm_extractor import (
 from pdf_fetcher import fetch_pdf
 
 ADAPTER_NAME = "eyc_breclav"
+
+# Czech NGO source: it surfaces events its Czech audience can join, so CZ is
+# folded into every event's eligibility set (Phase 4f-B). Guarantees the set is
+# never empty, so an incomplete partner extraction can't hide a Czech-eligible
+# event from Czech users.
+SENDING_COUNTRY = "CZ"
 
 _FORMAT_TO_SOURCE = {
     FORMAT_YOUTH_EXCHANGE: "youth_exchange",
@@ -227,6 +233,11 @@ def fetch() -> list[tuple[str, dict]]:
             "period_end": extracted["period_end"],
             "country": extracted["country"],
             "partner_countries": extracted["partner_countries"],
+            "eligible_countries": eligible_countries_for(
+                extracted["country"],
+                extracted["partner_countries"],
+                SENDING_COUNTRY,
+            ),
             "url": entry.get("link"),
             "raw": {
                 "rss_id": event_id[len(_ID_PREFIX):],

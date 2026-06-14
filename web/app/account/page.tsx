@@ -2,14 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { COUNTRIES } from "@/lib/countries";
 
-import { logout } from "./actions";
+import { logout, updateHomeCountry } from "./actions";
 
 type Profile = {
   id: string;
   subscription_status: "none" | "active" | "past_due" | "canceled";
   telegram_chat_id: number | null;
   subscription_current_period_end: string | null;
+  home_country: string | null;
 };
 
 type Filter = {
@@ -39,19 +41,25 @@ function describeFilter(f: Filter): string {
   return parts.join(" · ");
 }
 
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { error: actionError } = await searchParams;
+
   const [{ data: profile, error: profileError }, { data: filters }] =
     await Promise.all([
       supabase
         .from("profiles")
         .select(
-          "id, subscription_status, telegram_chat_id, subscription_current_period_end",
+          "id, subscription_status, telegram_chat_id, subscription_current_period_end, home_country",
         )
         .eq("id", user.id)
         .single<Profile>(),
@@ -112,7 +120,43 @@ export default async function AccountPage() {
             </Link>
           )}
         </dd>
+
+        <dt className="text-sm text-zinc-500">Home country</dt>
+        <dd className="text-sm">
+          <form
+            action={updateHomeCountry}
+            className="flex flex-wrap items-center gap-2"
+          >
+            <select
+              name="home_country"
+              defaultValue={profile?.home_country ?? ""}
+              className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+            >
+              <option value="">Not set</option>
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            >
+              Save
+            </button>
+            <span className="w-full text-xs text-zinc-500 sm:w-auto">
+              Used only by filters with eligibility enabled.
+            </span>
+          </form>
+        </dd>
       </dl>
+
+      {actionError && (
+        <p className="mt-6 text-sm text-red-600 dark:text-red-400">
+          {actionError}
+        </p>
+      )}
 
       {profileError && (
         <p className="mt-6 text-sm text-red-600 dark:text-red-400">

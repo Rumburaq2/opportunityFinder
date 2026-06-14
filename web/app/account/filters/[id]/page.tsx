@@ -13,7 +13,10 @@ type Filter = {
   date_from: string | null;
   date_to: string | null;
   active: boolean;
+  eligible_only: boolean;
 };
+
+type Profile = { home_country: string | null };
 
 export default async function EditFilterPage({
   params,
@@ -33,11 +36,18 @@ export default async function EditFilterPage({
     searchParams,
   ]);
 
-  const { data: filter } = await supabase
-    .from("subscriptions_filters")
-    .select("id, event_type, country, date_from, date_to, active")
-    .eq("id", id)
-    .maybeSingle<Filter>();
+  const [{ data: filter }, { data: profile }] = await Promise.all([
+    supabase
+      .from("subscriptions_filters")
+      .select("id, event_type, country, date_from, date_to, active, eligible_only")
+      .eq("id", id)
+      .maybeSingle<Filter>(),
+    supabase
+      .from("profiles")
+      .select("home_country")
+      .eq("id", user.id)
+      .single<Profile>(),
+  ]);
 
   if (!filter) notFound();
 
@@ -58,6 +68,7 @@ export default async function EditFilterPage({
 
       <FilterForm
         action={update}
+        homeCountry={profile?.home_country ?? null}
         submitLabel="Save changes"
         error={errorParam}
         initial={{
@@ -66,6 +77,7 @@ export default async function EditFilterPage({
           date_from: filter.date_from,
           date_to: filter.date_to,
           active: filter.active,
+          eligible_only: filter.eligible_only,
         }}
       />
 

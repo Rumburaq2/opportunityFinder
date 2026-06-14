@@ -20,12 +20,18 @@ raise `b_limit` to pull the whole current backlog in one robots-compliant
 request; new offers surface at the top on later cycles and hourly dedup
 (`seen_ids`) catches them.
 
-Eligibility is the `b_participating_countries` filter — a repeatable, OR-logic
-param. Phase 4f-A ships with a single value (CZ) so only courses a Czech
-participant can join are ingested (zero dispatch changes, zero noise for the
-current Czech-only audience). Phase 4f-B widens `_PARTICIPATING_COUNTRIES` to
-the full programme-country set and adds a per-user home-country eligibility
-gate in the dispatcher — no adapter rewrite, just a longer constant.
+Phase 4f-A ingested only courses a Czech participant could join via the
+`b_participating_countries=CZ` server filter (zero dispatch changes, zero noise
+for the then Czech-only audience). Phase 4f-B drops that filter entirely so the
+adapter ingests ALL training courses for an all-country audience; relevance is
+now handled downstream by the user's host-country filter plus an optional,
+per-filter home-country eligibility gate in the dispatcher.
+
+Because SALTO is a general (not Czech-sending) source, `SENDING_COUNTRY` is None
+and `eligible_countries` is `[host] + partners` ONLY when the LLM actually
+extracted partner countries; offers whose participating set can't be determined
+are DROPPED (mark_skipped "insufficient_eligibility") rather than stored as
+open-to-all — 4f-B accepts event loss over flooding non-eligible users.
 
 Flow per hourly cycle (mirrors the `bfy` HTML-listing pattern):
   1. GET the listing (page 1 only, newest-first); parse anchors to
@@ -50,11 +56,16 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from events_writer import mark_skipped, seen_ids
+from events_writer import eligible_countries_for, mark_skipped, seen_ids
 from llm_extractor import extract
 from pdf_fetcher import fetch_pdf
 
 ADAPTER_NAME = "salto"
+
+# General (non-Czech-sending) source: there is no implicit sending country to
+# fold into eligibility, so events with no extracted partners are dropped rather
+# than stored as open-to-all (Phase 4f-B). See eligible_countries_for.
+SENDING_COUNTRY = None
 
 # Every item is a Training Course (guaranteed by b_activity_type=4), so there
 # is no classification step — all results route to this one bucket.
@@ -66,9 +77,8 @@ _ID_PREFIX = "salto:"
 
 # SALTO activity-type id 4 == "Training Course".
 _ACTIVITY_TYPE_TRAINING_COURSE = "4"
-# Phase 4f-A: CZ only. Phase 4f-B widens this to the full programme-country set
-# (the param is repeatable with OR logic, so one feed still covers all of them).
-_PARTICIPATING_COUNTRIES = ("CZ",)
+# Phase 4f-B ingests ALL training courses (no b_participating_countries filter);
+# eligibility is enforced downstream per the user's optional home-country gate.
 # robots.txt forbids b_offset, so we crawl page 1 only and raise the limit to
 # capture the whole current backlog in a single compliant request.
 _LISTING_LIMIT = "100"
@@ -146,7 +156,8 @@ post-validation will drop obviously broken extractions.
 def _listing_url() -> str:
     """Build the browse URL with today's date filters. Deliberately omits
     b_offset (robots-disallowed) and sorts newest-first so page 1 + a high
-    b_limit captures the whole open backlog."""
+    b_limit captures the whole open backlog. No b_participating_countries filter
+    (Phase 4f-B): all training courses are ingested, eligibility is downstream."""
     today = date.today()
     params: list[tuple[str, str]] = [
         ("b_activity_type", _ACTIVITY_TYPE_TRAINING_COURSE),
@@ -159,8 +170,6 @@ def _listing_url() -> str:
         ("b_application_deadline_after_month", str(today.month)),
         ("b_application_deadline_after_year", str(today.year)),
     ]
-    for code in _PARTICIPATING_COUNTRIES:
-        params.append(("b_participating_countries", code))
     return str(httpx.URL(_BROWSE_URL, params=params))
 
 
@@ -314,6 +323,20 @@ def fetch() -> list[tuple[str, dict]]:
             mark_skipped(event_id, ADAPTER_NAME, "already_ended")
             continue
 
+        eligible = eligible_countries_for(
+            extracted["country"], extracted["partner_countries"], SENDING_COUNTRY,
+        )
+        if eligible is None:
+            # No partner countries extracted → participating set unknown. We
+            # refuse to store it as open-to-all, so drop it (4f-B: accept loss
+            # over flooding). Non-retryable: the extraction won't improve.
+            logging.info(
+                "salto: skipping %s (insufficient eligibility — no partners)",
+                event_id,
+            )
+            mark_skipped(event_id, ADAPTER_NAME, "insufficient_eligibility")
+            continue
+
         items.append((_SOURCE, {
             "id": event_id,
             "name": extracted["name"],
@@ -322,6 +345,7 @@ def fetch() -> list[tuple[str, dict]]:
             "period_end": extracted["period_end"],
             "country": extracted["country"],
             "partner_countries": extracted["partner_countries"],
+            "eligible_countries": eligible,
             "url": detail_url,
             "raw": {
                 "salto_id": event_id[len(_ID_PREFIX):],
