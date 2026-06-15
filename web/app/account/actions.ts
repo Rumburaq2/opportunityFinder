@@ -42,5 +42,5 @@ export async function updateHomeCountry(formData: FormData) {
   }
 
   revalidatePath("/account");
-  redirect("/account");
+  redirect("/account?saved=1");
 }

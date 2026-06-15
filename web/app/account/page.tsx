@@ -2,9 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { COUNTRIES } from "@/lib/countries";
 
 import { logout, updateHomeCountry } from "./actions";
+import { HomeCountryForm } from "./HomeCountryForm";
 
 type Profile = {
   id: string;
@@ -44,7 +44,7 @@ function describeFilter(f: Filter): string {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -52,7 +52,7 @@ export default async function AccountPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { error: actionError } = await searchParams;
+  const { error: actionError, saved } = await searchParams;
 
   const [{ data: profile, error: profileError }, { data: filters }] =
     await Promise.all([
@@ -123,32 +123,11 @@ export default async function AccountPage({
 
         <dt className="text-sm text-zinc-500">Home country</dt>
         <dd className="text-sm">
-          <form
+          <HomeCountryForm
             action={updateHomeCountry}
-            className="flex flex-wrap items-center gap-2"
-          >
-            <select
-              name="home_country"
-              defaultValue={profile?.home_country ?? ""}
-              className="h-9 rounded-md border border-zinc-300 bg-white px-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-            >
-              <option value="">Not set</option>
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="h-9 rounded-md border border-zinc-300 px-3 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-            >
-              Save
-            </button>
-            <span className="w-full text-xs text-zinc-500 sm:w-auto">
-              Used only by filters with eligibility enabled.
-            </span>
-          </form>
+            current={profile?.home_country ?? null}
+            saved={saved === "1"}
+          />
         </dd>
       </dl>
 
