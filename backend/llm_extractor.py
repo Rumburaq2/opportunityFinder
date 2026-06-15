@@ -18,6 +18,7 @@ import os
 from datetime import date, datetime, timedelta
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 _MODEL_NAME = "gemini-2.5-flash-lite"
@@ -180,6 +181,30 @@ def _validate(data: dict) -> dict | None:
     }
 
 
+def _generate(parts: list):
+    """Single Gemini structured-output call. Raises on API/network error."""
+    return _get_client().models.generate_content(
+        model=_MODEL_NAME,
+        contents=parts,
+        config={
+            "response_mime_type": "application/json",
+            "response_schema": _RESPONSE_SCHEMA,
+            "temperature": 0,
+        },
+    )
+
+
+def _is_bad_pdf_request(exc: Exception) -> bool:
+    """True when Gemini refused the request as malformed (HTTP 400) — with a PDF
+    attached this is almost always the PDF itself (unparseable / zero pages), so
+    the caller can usefully retry text-only. Deliberately excludes 429/5xx and
+    network errors, which a text-only retry wouldn't fix."""
+    return (
+        isinstance(exc, genai_errors.ClientError)
+        and getattr(exc, "code", None) == 400
+    )
+
+
 def extract(
     prompt: str, content: str, pdf_bytes: bytes | None = None,
 ) -> dict | None:
@@ -199,18 +224,31 @@ def extract(
             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
         )
     try:
-        response = _get_client().models.generate_content(
-            model=_MODEL_NAME,
-            contents=parts,
-            config={
-                "response_mime_type": "application/json",
-                "response_schema": _RESPONSE_SCHEMA,
-                "temperature": 0,
-            },
-        )
-    except Exception:
-        logging.exception("llm_extractor: Gemini call failed")
-        return None
+        response = _generate(parts)
+    except Exception as exc:
+        # An attached info-pack PDF can be unparseable by Gemini even after it
+        # passes pdf_fetcher's %PDF magic-byte check — e.g. a corrupt or
+        # zero-page file (observed on some SALTO downloads: 400 INVALID_ARGUMENT
+        # "The document has no pages."). Rather than lose the whole event, retry
+        # WITHOUT the PDF: text-only extraction is the same degraded path used
+        # when no PDF is available, and the page text usually still names the
+        # partner countries. Scoped narrowly to a 400 with a PDF attached so
+        # transient/quota failures (429, 5xx, network) behave exactly as before.
+        if pdf_bytes is not None and _is_bad_pdf_request(exc):
+            logging.warning(
+                "llm_extractor: Gemini rejected the attached PDF (%s); retrying "
+                "text-only", exc,
+            )
+            try:
+                response = _generate([prompt, content])
+            except Exception:
+                logging.exception(
+                    "llm_extractor: Gemini call failed (text-only retry)"
+                )
+                return None
+        else:
+            logging.exception("llm_extractor: Gemini call failed")
+            return None
 
     text = (response.text or "").strip() if response.text else ""
     if not text:
