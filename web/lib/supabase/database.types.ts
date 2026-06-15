@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           country: string | null
           description: string
+          eligible_countries: string[] | null
           first_seen_at: string
           id: string
           last_seen_at: string
@@ -32,6 +33,7 @@ export type Database = {
         Insert: {
           country?: string | null
           description?: string
+          eligible_countries?: string[] | null
           first_seen_at?: string
           id: string
           last_seen_at?: string
@@ -46,6 +48,7 @@ export type Database = {
         Update: {
           country?: string | null
           description?: string
+          eligible_countries?: string[] | null
           first_seen_at?: string
           id?: string
           last_seen_at?: string
@@ -105,6 +108,7 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          home_country: string | null
           id: string
           stripe_customer_id: string | null
           subscription_current_period_end: string | null
@@ -113,6 +117,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          home_country?: string | null
           id: string
           stripe_customer_id?: string | null
           subscription_current_period_end?: string | null
@@ -121,6 +126,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          home_country?: string | null
           id?: string
           stripe_customer_id?: string | null
           subscription_current_period_end?: string | null
@@ -172,6 +178,7 @@ export type Database = {
           created_at: string
           date_from: string | null
           date_to: string | null
+          eligible_only: boolean
           event_type: string
           id: string
           user_id: string
@@ -182,6 +189,7 @@ export type Database = {
           created_at?: string
           date_from?: string | null
           date_to?: string | null
+          eligible_only?: boolean
           event_type?: string
           id?: string
           user_id: string
@@ -192,6 +200,7 @@ export type Database = {
           created_at?: string
           date_from?: string | null
           date_to?: string | null
+          eligible_only?: boolean
           event_type?: string
           id?: string
           user_id?: string

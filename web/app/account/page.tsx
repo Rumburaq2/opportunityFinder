@@ -3,13 +3,15 @@ import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 
-import { logout } from "./actions";
+import { logout, updateHomeCountry } from "./actions";
+import { HomeCountryForm } from "./HomeCountryForm";
 
 type Profile = {
   id: string;
   subscription_status: "none" | "active" | "past_due" | "canceled";
   telegram_chat_id: number | null;
   subscription_current_period_end: string | null;
+  home_country: string | null;
 };
 
 type Filter = {
@@ -39,19 +41,25 @@ function describeFilter(f: Filter): string {
   return parts.join(" · ");
 }
 
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; saved?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const { error: actionError, saved } = await searchParams;
+
   const [{ data: profile, error: profileError }, { data: filters }] =
     await Promise.all([
       supabase
         .from("profiles")
         .select(
-          "id, subscription_status, telegram_chat_id, subscription_current_period_end",
+          "id, subscription_status, telegram_chat_id, subscription_current_period_end, home_country",
         )
         .eq("id", user.id)
         .single<Profile>(),
@@ -112,7 +120,22 @@ export default async function AccountPage() {
             </Link>
           )}
         </dd>
+
+        <dt className="text-sm text-zinc-500">Home country</dt>
+        <dd className="text-sm">
+          <HomeCountryForm
+            action={updateHomeCountry}
+            current={profile?.home_country ?? null}
+            saved={saved === "1"}
+          />
+        </dd>
       </dl>
+
+      {actionError && (
+        <p className="mt-6 text-sm text-red-600 dark:text-red-400">
+          {actionError}
+        </p>
+      )}
 
       {profileError && (
         <p className="mt-6 text-sm text-red-600 dark:text-red-400">

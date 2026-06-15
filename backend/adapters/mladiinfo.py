@@ -35,7 +35,7 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 
-from events_writer import mark_skipped, seen_ids
+from events_writer import eligible_countries_for, mark_skipped, seen_ids
 from llm_extractor import (
     FORMAT_TRAINING_COURSE,
     FORMAT_YOUTH_EXCHANGE,
@@ -44,6 +44,10 @@ from llm_extractor import (
 from pdf_fetcher import fetch_pdf
 
 ADAPTER_NAME = "mladiinfo"
+
+# Czech NGO source — CZ folded into every event's eligibility set (Phase 4f-B);
+# see eyc_breclav for the rationale.
+SENDING_COUNTRY = "CZ"
 
 _FORMAT_TO_SOURCE = {
     FORMAT_YOUTH_EXCHANGE: "youth_exchange",
@@ -334,6 +338,11 @@ def fetch() -> list[tuple[str, dict]]:
             "period_end": extracted["period_end"],
             "country": extracted["country"],
             "partner_countries": extracted["partner_countries"],
+            "eligible_countries": eligible_countries_for(
+                extracted["country"],
+                extracted["partner_countries"],
+                SENDING_COUNTRY,
+            ),
             "url": post_url,
             "raw": {
                 "rss_id": event_id[len(_ID_PREFIX):],

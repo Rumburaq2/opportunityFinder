@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createFilter } from "../actions";
 import { FilterForm } from "../FilterForm";
 
-type Profile = { subscription_status: string };
+type Profile = { subscription_status: string; home_country: string | null };
 type Filter = { active: boolean };
 
 export default async function NewFilterPage({
@@ -25,7 +25,7 @@ export default async function NewFilterPage({
   const [{ data: profile }, { data: filters }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("subscription_status")
+      .select("subscription_status, home_country")
       .eq("id", user.id)
       .single<Profile>(),
     supabase
@@ -62,6 +62,7 @@ export default async function NewFilterPage({
 
           <FilterForm
             action={createFilter}
+            homeCountry={profile?.home_country ?? null}
             submitLabel="Create filter"
             error={error}
           />
