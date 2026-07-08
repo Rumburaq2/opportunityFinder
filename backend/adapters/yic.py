@@ -34,6 +34,7 @@ State lives in the `events` and `skipped_sources` tables — no extra ledger.
 """
 from __future__ import annotations
 
+import html
 import logging
 import re
 from datetime import date, datetime
@@ -80,8 +81,10 @@ _DRIVE_LINK_RE = re.compile(
 
 EXTRACTION_PROMPT = """\
 You extract a single Erasmus+ mobility event from an open-call post by the
-Slovak NGO Youth Initiative Čaňa (https://www.yic.sk). Posts are mostly
-Slovak (occasionally English) with emoji-labelled structured fields. An
+Slovak NGO Youth Initiative Čaňa (https://www.yic.sk). The input starts
+with a "Title:" line (the post's title — it often carries the activity
+dates and venue) followed by the post body. Posts are mostly Slovak
+(occasionally English) with emoji-labelled structured fields. An
 info-pack PDF is often attached to this request — when present, prefer it
 for `partner_countries`, `country` (host), and exact dates; the
 participating countries usually appear as a list or a group-leaders/budget
@@ -125,7 +128,13 @@ Fields:
   Nórsko=NO, Island=IS.
 - `period_start`, `period_end`: ISO dates (YYYY-MM-DD) of the ACTIVITY
   itself, from "Termín konania:" — formats like "19. – 25. júl 2026" or
-  "17.08.2026 – 25.08.2026". Slovak month names: januára/január=01,
+  "17.08.2026 – 25.08.2026". IMPORTANT: some posts state the dates ONLY in
+  the "Title:" line at the top of the input (e.g. "MY BACKPACK ... BERNĀTI
+  25.06.2026 – 03.07.2026") — check the title when the body has no dates.
+  If NEITHER the title, body, nor PDF states the activity dates, do NOT
+  invent a plausible-looking range — set `format` to "other" instead (an
+  event whose dates cannot be stated is unusable and must be discarded).
+  Slovak month names: januára/január=01,
   februára/február=02, marca/marec=03, apríla/apríl=04, mája/máj=05,
   júna/jún=06, júla/júl=07, augusta/august=08, septembra/september=09,
   októbra/október=10, novembra/november=11, decembra/december=12. Use the
@@ -139,11 +148,15 @@ Fields:
       per sending country).
     * SECONDARY SOURCE — the post prose, where countries are actually
       NAMED. A participant count alone ("25 účastníkov") is NOT a country
-      list.
+      list, and vague phrases like "mladých ľudí z rôznych krajín" (young
+      people from various countries) name NOBODY.
   Use only real ISO-3166-1 alpha-2 country codes. NEVER output placeholder
-  or bloc codes such as "XX", "EU", "EUR", or "INT". If the sources only
-  count participants or say "programme countries" without naming
-  countries, return null rather than inventing codes.
+  or bloc codes such as "XX", "EU", "EUR", or "INT". The Slovak→ISO
+  mapping in the `country` field above is a TRANSLATION AID for names that
+  actually appear in the sources — it is NOT a list of candidates to copy
+  from. If neither the PDF nor the text NAMES specific countries,
+  `partner_countries` MUST be null — a null here is a correct, expected
+  answer, not a failure.
 - `description`: 80–160 word English summary covering the topic, target
   group, dates, host location, and anything practical (working language,
   participant age range, costs covered, number of Slovak places, how to
@@ -222,6 +235,15 @@ def fetch() -> list[tuple[str, dict]]:
             logging.info("yic: skipping %s (empty body)", event_id)
             continue
 
+        # YIC sometimes puts the activity dates ONLY in the post title
+        # ("MY BACKPACK ... BERNĀTI 25.06.2026 – 03.07.2026") — without it
+        # the LLM has nothing to extract dates from and hallucinates a
+        # plausible range that defeats the already_ended backstop.
+        title = html.unescape(
+            (post.get("title") or {}).get("rendered") or ""
+        ).strip()
+        content = f"Title: {title}\n\n{body}" if title else body
+
         pdf_bytes: bytes | None = None
         info_pack = _info_pack_url(body)
         if info_pack:
@@ -235,7 +257,7 @@ def fetch() -> list[tuple[str, dict]]:
         else:
             logging.info("yic: no info-pack link for %s", event_id)
 
-        extracted = extract(EXTRACTION_PROMPT, body, pdf_bytes=pdf_bytes)
+        extracted = extract(EXTRACTION_PROMPT, content, pdf_bytes=pdf_bytes)
         if extracted is None:
             continue  # validator already logged the reason
 
