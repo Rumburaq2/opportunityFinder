@@ -6,6 +6,42 @@ import { COUNTRIES } from "@/lib/countries";
 
 type EventType = "any" | "discovereu" | "youth_exchange" | "training_course";
 
+/**
+ * A scrollable grid of country checkboxes. Each box submits under the same
+ * `name`, so the server receives repeated values (FormData.getAll). Replaces a
+ * native <select multiple>, whose cmd/ctrl-click multi-select is undiscoverable.
+ */
+function CountryChecklist({
+  name,
+  selected,
+}: {
+  name: string;
+  selected: string[];
+}) {
+  const chosen = new Set(selected);
+  return (
+    <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-zinc-300 p-2 dark:border-zinc-700">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+        {COUNTRIES.map((c) => (
+          <label
+            key={c.code}
+            className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+          >
+            <input
+              type="checkbox"
+              name={name}
+              value={c.code}
+              defaultChecked={chosen.has(c.code)}
+              className="h-4 w-4 shrink-0"
+            />
+            <span className="truncate">{c.name}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type FilterFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   initial?: {
@@ -69,56 +105,30 @@ export function FilterForm({
       </div>
 
       <div>
-        <label
-          htmlFor="host_countries"
-          className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
+        <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Host country (optional)
-        </label>
-        <select
-          id="host_countries"
+        </span>
+        <CountryChecklist
           name="host_countries"
-          multiple
-          size={6}
-          defaultValue={initial?.host_countries ?? []}
-          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-        >
-          {COUNTRIES.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          selected={initial?.host_countries ?? []}
+        />
         <p className="mt-1 text-xs text-zinc-500">
-          Where the event is held. Select one or more — an event in{" "}
-          <em>any</em> of them matches. Leave empty for any country.
+          Where the event is held. Tick one or more — an event in <em>any</em> of
+          them matches. Leave all unticked for any country.
         </p>
       </div>
 
       <div>
-        <label
-          htmlFor="participant_countries"
-          className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
+        <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Participating countries (optional)
-        </label>
-        <select
-          id="participant_countries"
+        </span>
+        <CountryChecklist
           name="participant_countries"
-          multiple
-          size={6}
-          defaultValue={initial?.participant_countries ?? []}
-          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-        >
-          {COUNTRIES.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          selected={initial?.participant_countries ?? []}
+        />
         <p className="mt-1 text-xs text-zinc-500">
-          Only notify me when <em>all</em> selected countries take part (host or
-          partner). Leave empty to ignore participants.
+          Only notify me when <em>all</em> ticked countries take part (host or
+          partner). Leave all unticked to ignore participants.
         </p>
       </div>
 
