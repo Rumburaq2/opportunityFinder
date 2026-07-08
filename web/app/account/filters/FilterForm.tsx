@@ -6,11 +6,48 @@ import { COUNTRIES } from "@/lib/countries";
 
 type EventType = "any" | "discovereu" | "youth_exchange" | "training_course";
 
+/**
+ * A scrollable grid of country checkboxes. Each box submits under the same
+ * `name`, so the server receives repeated values (FormData.getAll). Replaces a
+ * native <select multiple>, whose cmd/ctrl-click multi-select is undiscoverable.
+ */
+function CountryChecklist({
+  name,
+  selected,
+}: {
+  name: string;
+  selected: string[];
+}) {
+  const chosen = new Set(selected);
+  return (
+    <div className="mt-1 max-h-48 overflow-y-auto rounded-md border border-zinc-300 p-2 dark:border-zinc-700">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+        {COUNTRIES.map((c) => (
+          <label
+            key={c.code}
+            className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+          >
+            <input
+              type="checkbox"
+              name={name}
+              value={c.code}
+              defaultChecked={chosen.has(c.code)}
+              className="h-4 w-4 shrink-0"
+            />
+            <span className="truncate">{c.name}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type FilterFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   initial?: {
     event_type: EventType;
-    country: string | null;
+    host_countries: string[] | null;
+    participant_countries: string[] | null;
     date_from: string | null;
     date_to: string | null;
     active: boolean;
@@ -68,24 +105,30 @@ export function FilterForm({
       </div>
 
       <div>
-        <label
-          htmlFor="country"
-          className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
-          Country (optional)
-        </label>
-        <input
-          id="country"
-          name="country"
-          type="text"
-          maxLength={2}
-          autoComplete="off"
-          placeholder="DE"
-          defaultValue={initial?.country ?? ""}
-          className="mt-1 h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm uppercase dark:border-zinc-700 dark:bg-zinc-950"
+        <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Host country (optional)
+        </span>
+        <CountryChecklist
+          name="host_countries"
+          selected={initial?.host_countries ?? []}
         />
         <p className="mt-1 text-xs text-zinc-500">
-          ISO 2-letter country code. Leave blank for any country.
+          Where the event is held. Tick one or more — an event in <em>any</em> of
+          them matches. Leave all unticked for any country.
+        </p>
+      </div>
+
+      <div>
+        <span className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Participating countries (optional)
+        </span>
+        <CountryChecklist
+          name="participant_countries"
+          selected={initial?.participant_countries ?? []}
+        />
+        <p className="mt-1 text-xs text-zinc-500">
+          Only notify me when <em>all</em> ticked countries take part (host or
+          partner). Leave all unticked to ignore participants.
         </p>
       </div>
 

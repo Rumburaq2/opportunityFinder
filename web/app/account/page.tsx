@@ -17,7 +17,8 @@ type Profile = {
 type Filter = {
   id: string;
   event_type: "any" | "discovereu" | "youth_exchange" | "training_course";
-  country: string | null;
+  host_countries: string[] | null;
+  participant_countries: string[] | null;
   date_from: string | null;
   date_to: string | null;
   active: boolean;
@@ -32,7 +33,12 @@ const EVENT_TYPE_LABEL: Record<Filter["event_type"], string> = {
 
 function describeFilter(f: Filter): string {
   const parts: string[] = [EVENT_TYPE_LABEL[f.event_type]];
-  if (f.country) parts.push(f.country);
+  if (f.host_countries && f.host_countries.length > 0) {
+    parts.push(`host: ${f.host_countries.join("/")}`);
+  }
+  if (f.participant_countries && f.participant_countries.length > 0) {
+    parts.push(`with: ${f.participant_countries.join("+")}`);
+  }
   if (f.date_from || f.date_to) {
     const from = f.date_from ?? "…";
     const to = f.date_to ?? "…";
@@ -65,7 +71,9 @@ export default async function AccountPage({
         .single<Profile>(),
       supabase
         .from("subscriptions_filters")
-        .select("id, event_type, country, date_from, date_to, active")
+        .select(
+          "id, event_type, host_countries, participant_countries, date_from, date_to, active",
+        )
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .returns<Filter[]>(),

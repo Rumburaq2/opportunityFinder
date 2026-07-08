@@ -17,11 +17,37 @@ type EventType = (typeof EVENT_TYPES)[number];
 type FilterInput = {
   event_type: EventType;
   country: string | null;
+  host_countries: string[] | null;
+  participant_countries: string[] | null;
   date_from: string | null;
   date_to: string | null;
   active: boolean;
   eligible_only: boolean;
 };
+
+/**
+ * Parse a multi-country form field (submitted as repeated values by a
+ * <select multiple>) into a deduped, uppercased ISO-2 array. Returns null when
+ * empty (= no constraint) or a validation error string on an unknown code.
+ */
+function parseCountryList(
+  values: FormDataEntryValue[],
+): string[] | { error: string } | null {
+  const codes = Array.from(
+    new Set(
+      values
+        .map((v) => String(v).trim().toUpperCase())
+        .filter((v) => v.length > 0),
+    ),
+  );
+  if (codes.length === 0) return null;
+  for (const code of codes) {
+    if (!isKnownCountry(code)) {
+      return { error: "Please pick countries from the list." };
+    }
+  }
+  return codes;
+}
 
 type ParsedForm = {
   filter: FilterInput;
@@ -41,6 +67,15 @@ function parseForm(formData: FormData): ParsedForm | { error: string } {
     .toUpperCase();
   if (country && !/^[A-Z]{2}$/.test(country)) {
     return { error: "Country must be a 2-letter code (e.g. DE, FR)." };
+  }
+
+  const hostCountries = parseCountryList(formData.getAll("host_countries"));
+  if (hostCountries && "error" in hostCountries) return hostCountries;
+  const participantCountries = parseCountryList(
+    formData.getAll("participant_countries"),
+  );
+  if (participantCountries && "error" in participantCountries) {
+    return participantCountries;
   }
 
   const dateFrom = String(formData.get("date_from") ?? "").trim() || null;
@@ -65,6 +100,8 @@ function parseForm(formData: FormData): ParsedForm | { error: string } {
     filter: {
       event_type: rawEventType as EventType,
       country: country || null,
+      host_countries: hostCountries,
+      participant_countries: participantCountries,
       date_from: dateFrom,
       date_to: dateTo,
       active: formData.get("active") === "on",
