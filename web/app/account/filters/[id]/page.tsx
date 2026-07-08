@@ -9,7 +9,8 @@ import { FilterForm } from "../FilterForm";
 type Filter = {
   id: string;
   event_type: "any" | "discovereu" | "youth_exchange" | "training_course";
-  country: string | null;
+  host_countries: string[] | null;
+  participant_countries: string[] | null;
   date_from: string | null;
   date_to: string | null;
   active: boolean;
@@ -39,7 +40,9 @@ export default async function EditFilterPage({
   const [{ data: filter }, { data: profile }] = await Promise.all([
     supabase
       .from("subscriptions_filters")
-      .select("id, event_type, country, date_from, date_to, active, eligible_only")
+      .select(
+        "id, event_type, host_countries, participant_countries, date_from, date_to, active, eligible_only",
+      )
       .eq("id", id)
       .maybeSingle<Filter>(),
     supabase
@@ -73,7 +76,8 @@ export default async function EditFilterPage({
         error={errorParam}
         initial={{
           event_type: filter.event_type,
-          country: filter.country,
+          host_countries: filter.host_countries,
+          participant_countries: filter.participant_countries,
           date_from: filter.date_from,
           date_to: filter.date_to,
           active: filter.active,

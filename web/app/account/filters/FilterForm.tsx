@@ -10,7 +10,8 @@ type FilterFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   initial?: {
     event_type: EventType;
-    country: string | null;
+    host_countries: string[] | null;
+    participant_countries: string[] | null;
     date_from: string | null;
     date_to: string | null;
     active: boolean;
@@ -69,23 +70,55 @@ export function FilterForm({
 
       <div>
         <label
-          htmlFor="country"
+          htmlFor="host_countries"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          Country (optional)
+          Host country (optional)
         </label>
-        <input
-          id="country"
-          name="country"
-          type="text"
-          maxLength={2}
-          autoComplete="off"
-          placeholder="DE"
-          defaultValue={initial?.country ?? ""}
-          className="mt-1 h-9 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm uppercase dark:border-zinc-700 dark:bg-zinc-950"
-        />
+        <select
+          id="host_countries"
+          name="host_countries"
+          multiple
+          size={6}
+          defaultValue={initial?.host_countries ?? []}
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+        >
+          {COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.name}
+            </option>
+          ))}
+        </select>
         <p className="mt-1 text-xs text-zinc-500">
-          ISO 2-letter country code. Leave blank for any country.
+          Where the event is held. Select one or more — an event in{" "}
+          <em>any</em> of them matches. Leave empty for any country.
+        </p>
+      </div>
+
+      <div>
+        <label
+          htmlFor="participant_countries"
+          className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Participating countries (optional)
+        </label>
+        <select
+          id="participant_countries"
+          name="participant_countries"
+          multiple
+          size={6}
+          defaultValue={initial?.participant_countries ?? []}
+          className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+        >
+          {COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-zinc-500">
+          Only notify me when <em>all</em> selected countries take part (host or
+          partner). Leave empty to ignore participants.
         </p>
       </div>
 
