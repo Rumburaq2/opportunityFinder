@@ -10,6 +10,26 @@ Adding a new NGO: write `adapters/<slug>.py` exposing `fetch()` and
 """
 from __future__ import annotations
 
-from . import adel, bfy, europsky_dialog, eyc_breclav, mladiinfo, salto, yic, yysk
+from . import (
+    adel,
+    bfy,
+    erasmusgram,
+    europsky_dialog,
+    eyc_breclav,
+    mladiinfo,
+    salto,
+    yic,
+    yysk,
+)
 
-ADAPTERS = [eyc_breclav, bfy, mladiinfo, salto, yysk, adel, europsky_dialog, yic]
+ADAPTERS = [
+    eyc_breclav,
+    bfy,
+    mladiinfo,
+    salto,
+    yysk,
+    adel,
+    europsky_dialog,
+    yic,
+    erasmusgram,
+]
