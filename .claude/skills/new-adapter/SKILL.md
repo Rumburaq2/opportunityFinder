@@ -39,13 +39,29 @@ take the **first** one that works — do not scrape HTML when an API exists.
    open-calls-only (Mladiinfo lesson: the broad feed wastes Gemini quota on
    posts classified `other`).
 4. **RSS excerpts + detail-page fetch** (Mladiinfo pattern, `adapters/mladiinfo.py`).
-5. **HTML listing + detail pages** (BFY/YYSK/SALTO pattern, `adapters/bfy.py`,
+5. **Wix `wix-warmup-data` CMS collection** (Youth IST pattern,
+   `adapters/youthist.py`) — when the site is Wix (WP probes 404, no RSS),
+   check a server-rendered *dynamic detail page* (not the listing — it has no
+   warmup data) for a `<script id="wix-warmup-data">` tag: it may embed the
+   ENTIRE CMS collection as JSON at
+   `appsWarmupData.dataBinding.dataStore.recordsByCollectionId.<Collection>`,
+   with machine fields (UUID `_id`, status, type, ISO deadline, ISO-2 host,
+   richcontent body tree incl. info-pack fileData nodes with byte size).
+   Discover detail URLs via the dynamic child sitemap from the sitemap index
+   (its filename embeds a rotatable Wix hash — re-match it each cycle, never
+   hardcode). Multi-value CMS fields arrive as one-element lists. Internal
+   Wix SSR format: fail soft to `[]`, and warn if the sitemap lists more URLs
+   than the collection has records (pagination canary).
+6. **HTML listing + detail pages** (BFY/YYSK/SALTO pattern, `adapters/bfy.py`,
    `adapters/yysk.py`, `adapters/salto.py`) — last resort.
 
 **RSS trap check (YYSK lesson):** before trusting any feed, read 5+ items and
 confirm they are OPEN CALLS, not past-event write-ups ("how it went"
 retrospectives). A feed of retrospectives disqualifies option 3/4 even though
-the feed technically exists.
+the feed technically exists. Similarly, posts that look like open calls may be
+"Internal Participation" FYIs (Youth IST lesson: participation internal to the
+NGO, not an open call, while still carrying a real project type) — the prompt
+must classify those as `other`.
 
 ### Recon checklist (answer every line)
 
@@ -99,6 +115,7 @@ Copy the **nearest-pattern exemplar** as your starting point:
 | WP core API + category | `adapters/erasmusgram.py` (national) / `adapters/yic.py` |
 | RSS full-body | `adapters/europsky_dialog.py` |
 | RSS + detail fetch | `adapters/mladiinfo.py` |
+| Wix warmup-data CMS | `adapters/youthist.py` |
 | HTML listing | `adapters/yysk.py` (deadline pre-filter) / `adapters/bfy.py` |
 
 ### Module contract
@@ -170,6 +187,13 @@ Required checks (from the plan's Phase-4 test protocol):
    validation (`period_start ≤ period_end`, ISO-2 host, required fields
    non-null). Eyeball the extraction against the actual post: host country,
    activity dates (not travel dates), name, partner list.
+   **Designed-PDF trap (Youth IST lesson):** when checking `partner_countries`
+   against an info-pack, do NOT trust a text-layer grep — Canva/designed PDFs
+   often have broken font char-maps, so pypdf extracts garbage or nothing
+   while Gemini reads the rendered pages fine. A "country isn't in the PDF"
+   grep can be a false negative; render the pages to images (pymupdf into the
+   scratchpad) and look. Countries often hide in the visa section and the
+   per-country travel-reimbursement lines.
 3. A non-target post (retrospective, ESC, online course — find one if the
    source has any) classifies as `other` and is marked skipped.
 4. **Dedup**: run `fetch()` a second time — zero LLM calls (everything lands
