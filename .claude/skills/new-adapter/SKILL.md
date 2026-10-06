@@ -52,8 +52,32 @@ take the **first** one that works — do not scrape HTML when an API exists.
    hardcode). Multi-value CMS fields arrive as one-element lists. Internal
    Wix SSR format: fail soft to `[]`, and warn if the sitemap lists more URLs
    than the collection has records (pagination canary).
-6. **HTML listing + detail pages** (BFY/YYSK/SALTO pattern, `adapters/bfy.py`,
+6. **Bespoke JSON API behind a JS listing** (GO Alive pattern, `adapters/goalive.py`)
+   — when the listing page ships a placeholder ("Loading projects…", an empty
+   grid `<div>`) the data is fetched client-side, so **read the page's own
+   loader script before concluding you must scrape HTML**. Pull every
+   `<script src=…>` the listing loads and grep it for `fetch(`, `admin-ajax`,
+   `/api`, `.php?action=`. A hand-rolled endpoint often returns a richer record
+   than any of the options above: GO Alive's
+   `/api_erasmus_projects.php?action=list` (+ `&action=get&id=<n>` for detail)
+   yields machine ISO `start_date`/`end_date`, a `type_of_project` string that
+   pre-classifies YE/TC/APV, host `country`/`city`, and long-form `about` /
+   `accommodation` / `travel_reimbursement` prose — leaving the LLM only ISO-2
+   mapping, the summary, and `partner_countries`. Costs: the endpoint is
+   unversioned and undocumented, so check the payload's own success flag,
+   validate that expected keys exist, `.strip()` every string (these APIs leak
+   whitespace: `" Romania"`, `"Italy "`), and fail soft to `[]` on any shape
+   change. Closed items may simply 404 or return `success: false` — a free
+   upcoming-only filter, but keep the `period_end` backstop anyway.
+7. **HTML listing + detail pages** (BFY/YYSK/SALTO pattern, `adapters/bfy.py`,
    `adapters/yysk.py`, `adapters/salto.py`) — last resort.
+
+**"First one that works" means it carries the open-calls data (GO Alive
+lesson).** An endpoint that merely responds does not settle the choice: GO
+Alive's WP core API is live and has an `erasmus-projects` category with 71
+posts, but those are blog write-ups — the actual opportunities only exist
+behind the custom PHP endpoint. Before locking a strategy, confirm the records
+it returns are the calls you came for.
 
 **RSS trap check (YYSK lesson):** before trusting any feed, read 5+ items and
 confirm they are OPEN CALLS, not past-event write-ups ("how it went"
@@ -116,6 +140,7 @@ Copy the **nearest-pattern exemplar** as your starting point:
 | RSS full-body | `adapters/europsky_dialog.py` |
 | RSS + detail fetch | `adapters/mladiinfo.py` |
 | Wix warmup-data CMS | `adapters/youthist.py` |
+| Bespoke JSON API | `adapters/goalive.py` |
 | HTML listing | `adapters/yysk.py` (deadline pre-filter) / `adapters/bfy.py` |
 
 ### Module contract
@@ -156,8 +181,12 @@ Copy the **nearest-pattern exemplar** as your starting point:
    participating-countries list, group-leaders table, budget/reimbursement
    table with one row per sending country.
 3. Canva links are not PDFs — do not match them; text-only extraction.
-4. Application-form links (docs.google.com/forms, forms.gle) are never
-   info-packs.
+4. Application-form links are never info-packs. Google's hosts
+   (docs.google.com/forms, forms.gle) are the common case but **not the only
+   one** — check what the source actually uses before writing the exclusion
+   (FIOH recon turned up `*.bitrix24site.ru` CRM forms, and `padlet.com` and
+   `youth.europa.eu` links also appear in call bodies). Match the form host
+   the source really links to, not the host you expected.
 5. Online-only offerings (webinars, e-learning, free online courses) classify
    as `other` — no meaningful host country, not a KA1 mobility.
 6. Never invent dates: if neither post nor PDF states activity dates, the

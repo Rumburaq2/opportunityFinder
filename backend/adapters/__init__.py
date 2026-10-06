@@ -16,6 +16,7 @@ from . import (
     erasmusgram,
     europsky_dialog,
     eyc_breclav,
+    goalive,
     mladiinfo,
     salto,
     yic,
@@ -34,4 +35,5 @@ ADAPTERS = [
     yic,
     erasmusgram,
     youthist,
+    goalive,
 ]
